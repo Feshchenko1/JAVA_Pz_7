@@ -89,14 +89,13 @@ public class EventControllerIntegrationTest {
         adminUser.setRoles(adminRoles);
         userRepository.save(adminUser);
 
+
         Venue venue = new Venue();
         venue.setName("Test Venue From Setup");
         venue.setAddress("123 Test Address");
         venue.setCapacity(100);
-        Venue savedVenue = venueRepository.saveAndFlush(venue); // Важливо!
+        Venue savedVenue = venueRepository.saveAndFlush(venue);
         this.testVenueId = savedVenue.getId();
-
-
     }
 
     @Test
@@ -117,7 +116,7 @@ public class EventControllerIntegrationTest {
         JwtResponse jwtResponse = objectMapper.readValue(responseString, JwtResponse.class);
         String token = jwtResponse.getAccessToken();
 
-        Optional<Venue> existingVenue = venueRepository.findById(1L);
+        Optional<Venue> existingVenue = venueRepository.findById(this.testVenueId);
         assertThat(existingVenue).isPresent();
 
         Event eventToCreate = new Event();
@@ -127,7 +126,7 @@ public class EventControllerIntegrationTest {
         mockMvc.perform(post("/api/events")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .param("venueId", this.testVenueId.toString()) // Використовуй збережений ID
+                        .param("venueId", this.testVenueId.toString())
                         .content(objectMapper.writeValueAsString(eventToCreate)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("New Test Event"))

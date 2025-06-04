@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,6 +48,8 @@ public class AuthControllerIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
@@ -58,7 +61,7 @@ public class AuthControllerIntegrationTest {
 
         User adminUser = new User();
         adminUser.setUsername("admin");
-        adminUser.setPassword("123123");
+        adminUser.setPassword(passwordEncoder.encode("123123"));
         adminUser.setEmail("admin@test.com");
         adminUser.setEnabled(true);
         Role adminRole = roleRepository.findByName("ROLE_ADMIN").orElseThrow();
