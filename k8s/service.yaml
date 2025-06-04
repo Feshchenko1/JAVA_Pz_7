@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: springboot-app-service
+  name: pz41-app-service
 spec:
   type: NodePort
   selector:

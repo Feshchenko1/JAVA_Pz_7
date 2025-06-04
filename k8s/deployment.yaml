@@ -1,7 +1,8 @@
+# k8s/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: springboot-app-deployment
+  name: pz41-app-deployment
 spec:
   replicas: 1
   selector:
@@ -14,16 +15,23 @@ spec:
     spec:
       containers:
         - name: springboot-app
-          image: springboot-app:latest
-          imagePullPolicy: Never
+          image: pz41-app:latest
+          imagePullPolicy: Never # Це нормально для локальних образів Minikube, якщо образ вже є
           ports:
             - containerPort: 8080
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:mysql://localhost:3306/pz_5_db"
+              value: "jdbc:h2:mem:testdb"
             - name: SPRING_DATASOURCE_USERNAME
               value: "root"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "admin"
+            - name: SPRING_FLYWAY_ENABLED
+              value: "false"
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: "update"
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: "org.hibernate.dialect.H2Dialect"
             - name: JWT_SECRET
               value: "KgcPh88SUiCubeT5YeiyK7mIIlPCywg/+Ths1DMEHkucfyH6mFr8gwEiH/PnPmx8rdDymZkpXlEjisY+h8yLkA=="
+
