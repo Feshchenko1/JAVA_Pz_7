@@ -1,10 +1,5 @@
 pipeline {
     agent any
-
-    tools {
-
-    }
-
     environment {
         IMAGE_NAME = "pz41-app"
         IMAGE_TAG = "latest"
