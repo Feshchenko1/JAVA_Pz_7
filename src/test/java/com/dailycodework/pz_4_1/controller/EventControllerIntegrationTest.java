@@ -2,6 +2,7 @@ package com.dailycodework.pz_4_1.controller;
 
 import com.dailycodework.pz_4_1.model.Event;
 import com.dailycodework.pz_4_1.model.Role;
+import com.dailycodework.pz_4_1.model.User;
 import com.dailycodework.pz_4_1.model.Venue;
 import com.dailycodework.pz_4_1.payload.request.LoginRequest;
 import com.dailycodework.pz_4_1.payload.response.JwtResponse;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,7 +24,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,6 +56,9 @@ public class EventControllerIntegrationTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -68,8 +75,25 @@ public class EventControllerIntegrationTest {
         userRepository.deleteAll();
         roleRepository.deleteAll();
 
-        Role roleAdmin = roleRepository.save(new Role("ROLE_ADMIN"));
-        Role roleUser = roleRepository.save(new Role("ROLE_USER"));
+        Role roleAdminEntity = roleRepository.save(new Role("ROLE_ADMIN"));
+        Role roleUserEntity = roleRepository.save(new Role("ROLE_USER"));
+
+        User adminUser = new User();
+        adminUser.setUsername("admin");
+        adminUser.setPassword(passwordEncoder.encode("123123"));
+        adminUser.setEmail("admin@test.com");
+        adminUser.setEnabled(true);
+        Set<Role> adminRoles = new HashSet<>();
+        adminRoles.add(roleAdminEntity);
+        adminUser.setRoles(adminRoles);
+        userRepository.save(adminUser);
+
+        Venue venue = new Venue();
+        venue.setId(1L);
+        venue.setName("Test Venue From Setup");
+        venue.setAddress("123 Test Address");
+        venue.setCapacity(100);
+        venueRepository.save(venue);
     }
 
     @Test
