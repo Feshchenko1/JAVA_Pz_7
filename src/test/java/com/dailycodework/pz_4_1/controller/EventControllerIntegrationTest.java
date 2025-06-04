@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 @ActiveProfiles("test")
-//@Sql(value = "/scripts/insert-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(value = "/scripts/insert-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 public class EventControllerIntegrationTest {
 
     @Autowired
@@ -63,7 +63,7 @@ public class EventControllerIntegrationTest {
 
     @Autowired
     private RoleRepository roleRepository;
-
+    private Long testVenueId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -74,6 +74,7 @@ public class EventControllerIntegrationTest {
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
         roleRepository.deleteAll();
+
 
         Role roleAdminEntity = roleRepository.save(new Role("ROLE_ADMIN"));
         Role roleUserEntity = roleRepository.save(new Role("ROLE_USER"));
@@ -89,11 +90,13 @@ public class EventControllerIntegrationTest {
         userRepository.save(adminUser);
 
         Venue venue = new Venue();
-        venue.setId(1L);
         venue.setName("Test Venue From Setup");
         venue.setAddress("123 Test Address");
         venue.setCapacity(100);
-        venueRepository.save(venue);
+        Venue savedVenue = venueRepository.saveAndFlush(venue); // Важливо!
+        this.testVenueId = savedVenue.getId();
+
+
     }
 
     @Test
@@ -124,18 +127,18 @@ public class EventControllerIntegrationTest {
         mockMvc.perform(post("/api/events")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .param("venueId", "1")
+                        .param("venueId", this.testVenueId.toString()) // Використовуй збережений ID
                         .content(objectMapper.writeValueAsString(eventToCreate)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("New Test Event"))
                 .andExpect(jsonPath("$.eventDate").value(eventToCreate.getEventDate().toString()))
-                .andExpect(jsonPath("$.venue.id").value(1L));
+                .andExpect(jsonPath("$.venue.id").value(this.testVenueId));
 
         Optional<Event> createdEvent = eventRepository.findByName("New Test Event").stream().findFirst();
         assertThat(createdEvent).isPresent();
         assertThat(createdEvent.get().getName()).isEqualTo("New Test Event");
         assertThat(createdEvent.get().getEventDate()).isEqualTo(LocalDate.now().plusDays(10));
-        assertThat(createdEvent.get().getVenue().getId()).isEqualTo(1L);
+        assertThat(createdEvent.get().getVenue().getId()).isEqualTo(this.testVenueId);
     }
     @Test
     @DisplayName("create Event має повертати неавторизований статус, якщо не автентифіковано")
