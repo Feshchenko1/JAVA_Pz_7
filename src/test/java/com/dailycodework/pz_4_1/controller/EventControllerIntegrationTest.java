@@ -1,11 +1,11 @@
 package com.dailycodework.pz_4_1.controller;
 
 import com.dailycodework.pz_4_1.model.Event;
+import com.dailycodework.pz_4_1.model.Role;
 import com.dailycodework.pz_4_1.model.Venue;
 import com.dailycodework.pz_4_1.payload.request.LoginRequest;
 import com.dailycodework.pz_4_1.payload.response.JwtResponse;
-import com.dailycodework.pz_4_1.repository.EventRepository;
-import com.dailycodework.pz_4_1.repository.VenueRepository;
+import com.dailycodework.pz_4_1.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 @ActiveProfiles("test")
-@Sql(value = "/scripts/insert-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+//@Sql(value = "/scripts/insert-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 public class EventControllerIntegrationTest {
 
     @Autowired
@@ -48,9 +48,28 @@ public class EventControllerIntegrationTest {
     @Autowired
     private VenueRepository venueRepository;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         objectMapper.registerModule(new JavaTimeModule());
+
+        eventRepository.deleteAll();
+        venueRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
+        userRepository.deleteAll();
+        roleRepository.deleteAll();
+
+        Role roleAdmin = roleRepository.save(new Role("ROLE_ADMIN"));
+        Role roleUser = roleRepository.save(new Role("ROLE_USER"));
     }
 
     @Test
