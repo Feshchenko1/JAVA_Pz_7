@@ -158,7 +158,7 @@ stage('Deploy to Minikube') {
             }
         }
     }
-
+}
 
     post {
         success {
@@ -171,4 +171,3 @@ stage('Deploy to Minikube') {
             echo '🔚 Pipeline finished.'
         }
     }
-}
