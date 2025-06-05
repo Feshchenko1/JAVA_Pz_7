@@ -87,7 +87,7 @@ stage('Build Docker Image') {
                     echo "⚙️ Налаштовуємо Docker на Minikube демон..."
                     // Об'єднуємо налаштування середовища та подальші Docker команди в один sh блок
                     sh """
-                        eval $(minikube -p minikube docker-env)
+                        eval \$(minikube -p minikube docker-env)
                         echo "DOCKER_HOST: \${DOCKER_HOST}"
                         echo "DOCKER_CERT_PATH: \${DOCKER_CERT_PATH}"
                         echo "DOCKER_TLS_VERIFY: \${DOCKER_TLS_VERIFY}"
