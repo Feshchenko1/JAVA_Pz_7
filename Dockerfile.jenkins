@@ -1,16 +1,42 @@
-FROM jenkins/jenkins:lts
+FROM jenkins/jenkins:lts-jdk17
 
 USER root
 
-# Оновлення та встановлення docker cli і curl
-RUN apt-get update && apt-get install -y docker.io curl
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y docker.io curl && \
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
-    rm kubectl && \
-    docker --version && \
-    kubectl version --client
+# Install common tools and set up Docker's GPG key and Kubernetes GPG key
+RUN apt-get update && \
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release --no-install-recommends && \
+    \
+    # Setup Docker repository
+    mkdir -m 0755 -p /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+    \
+    # Setup Kubernetes repository
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \
+    \
+    apt-get update
 
+# Install Docker CLI tools and kubectl
+RUN apt-get install -y \
+    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+    kubectl \
+    --no-install-recommends
+
+# Install minikube (still from direct download, as it's not in default apt repos)
+RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && \
+    install minikube-linux-amd64 /usr/local/bin/minikube && \
+    rm minikube-linux-amd64
+
+# Clean up apt cache and verify installations
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Verify installations
+RUN docker --version && \
+    kubectl version --client && \
+    minikube version
 
 USER jenkins
