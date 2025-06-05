@@ -85,13 +85,14 @@ pipeline {
 
                     // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
                     echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-    //змінне оточення від minikube docker-env
-    eval "$(minikube -p minikube docker-env)"
+                    echo "⚙️ Налаштовуємо Docker на Minikube демон..."
+    //Отримуємо змінне оточення від minikube docker-env
+    sh 'eval $(minikube -p minikube docker-env)'
     //Перевіряємо, чи Docker тепер доступний
-    docker info
-    echo "DOCKER_HOST: $DOCKER_HOST"
-    echo "DOCKER_CERT_PATH: $DOCKER_CERT_PATH"
-    echo "DOCKER_TLS_VERIFY: $DOCKER_TLS_VERIFY"
+    sh 'docker info'
+    echo "DOCKER_HOST: ${DOCKER_HOST}"
+    echo "DOCKER_CERT_PATH: ${DOCKER_CERT_PATH}"
+    echo "DOCKER_TLS_VERIFY: ${DOCKER_TLS_VERIFY}"
 
                     echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
                     try {
