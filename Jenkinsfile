@@ -1,4 +1,5 @@
 pipeline {
+ agent any
     environment {
         IMAGE_NAME = "pz41-app"
         IMAGE_TAG = "latest"
@@ -8,7 +9,7 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            agent any
+
             steps {
                 echo 'Fetching code from repository...'
                 checkout scm
