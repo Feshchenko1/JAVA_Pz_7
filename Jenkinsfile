@@ -2,10 +2,10 @@ pipeline {
     agent any
     environment {
         IMAGE_NAME = "pz41-app"
-        IMAGE_TAG = "latest"
+        IMAGE_TAG = "latest" // Для простоти використовуємо latest, оскільки в Minikube буде локальний образ
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
-        DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials' // Задай свій ID креденшалів для DockerHub тут
+        // DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials' // Не потрібно, якщо не пушимо в Docker Hub
     }
 
     stages {
@@ -71,10 +71,10 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                            if (!fileExists('Dockerfile')) {
-                                error "❌ Dockerfile не знайдено в робочій директорії!"
-                            }
-                            echo '📋 Dockerfile знайдено. Продовжуємо...'
+                    if (!fileExists('Dockerfile')) {
+                        error "❌ Dockerfile не знайдено в робочій диреторії!"
+                    }
+                    echo '📋 Dockerfile знайдено. Продовжуємо...'
 
                     echo '📋 Перевіряємо вміст робочої директорії:'
                     sh 'ls -la $WORKSPACE'
@@ -83,28 +83,33 @@ pipeline {
                     echo '📋 Вміст папки target:'
                     sh 'ls -la $WORKSPACE/target'
 
-                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                                try {
-                                    sh 'docker info'
-                                } catch (e) {
-                                    error "❌ Docker daemon недоступний! Перевірте налаштування Jenkins агента."
-                                }
-                    try {
-                        docker.build("${IMAGE_NAME}:${IMAGE_TAG}", ".")
-                        echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+                    // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
+                    echo "⚙️ Налаштовуємо Docker на Minikube демон..."
+                    sh 'eval $(minikube -p minikube docker-env)'
+                    sh 'docker info' // Перевіряємо, чи тепер бачимо Docker Daemon Minikube
 
+                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                    try {
+                        // Використовуємо звичайний 'sh' для docker build, оскільки 'docker.build' (Jenkins Docker Pipeline plugin)
+                        // може не повністю працювати з Minikube docker-env.
+                        // Або ж, можна спробувати docker.withRegistry для локального registry, якщо попередній варіант не працює
+                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                        echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
                     } catch (e) {
                         echo "❌ Failed to build Docker image: ${e.getMessage()}"
                         error "Docker image build failed"
                     }
-
                 }
             }
         }
 
+        // Stage 'Push Docker Image' може бути видалений або зроблений умовним,
+        // якщо ви НЕ плануєте пушити образ в зовнішній реєстр для Minikube.
+        // Для локального розгортання через `minikube docker-env` це не потрібно.
+        /*
         stage('Push Docker Image') {
             when {
-                expression { return env.IMAGE_TAG != 'latest' }
+                expression { return env.IMAGE_TAG != 'latest' } // Push only if not 'latest' or for specific tags
             }
             steps {
                 script {
@@ -121,31 +126,35 @@ pipeline {
                 }
             }
         }
+        */
 
         stage('Deploy to Minikube') {
             steps {
                 script {
-                 def kubectlVersion = sh(script: "kubectl version --client --short", returnStdout: true).trim()
-                            echo "ℹ️ Kubectl version: ${kubectlVersion}"
+                    echo "⚙️ Налаштовуємо Kubectl на контекст Minikube..."
+                    sh 'kubectl config use minikube' // Переконайтесь, що kubectl використовує правильний контекст
+                    sh 'kubectl config current-context' // Перевіряємо поточний контекст
 
-                            def nodes = sh(script: "kubectl get nodes --no-headers | wc -l", returnStdout: true).trim()
-                            if (nodes == '0') {
-                                error "❌ Немає доступних нод у кластері Kubernetes!"
-                            }
+                    def kubectlVersion = sh(script: "kubectl version --client --short", returnStdout: true).trim()
+                    echo "ℹ️ Kubectl version: ${kubectlVersion}"
+
+                    def nodes = sh(script: "kubectl get nodes --no-headers | wc -l", returnStdout: true).trim()
+                    if (nodes == '0') {
+                        error "❌ Немає доступних нод у кластері Kubernetes! Переконайтесь, що Minikube запущено."
+                    }
                     echo "📦 Deploying to Minikube..."
                     try {
-                        if (env.IMAGE_TAG == "latest") {
-                            echo "♻️ Rolling restart of deployment ${K8S_DEPLOYMENT_NAME}..."
-                            sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default"
-                            sleep 10
-                        } else {
-                            echo "🔄 Updating deployment image to ${IMAGE_NAME}:${IMAGE_TAG}..."
-                            sh "kubectl set image deployment/${K8S_DEPLOYMENT_NAME} ${K8S_DEPLOYMENT_NAME}=${IMAGE_NAME}:${IMAGE_TAG} --namespace=default --record"
-                        }
-
+                        // Оскільки ми використовуємо :latest і очікуємо локальний образ,
+                        // найкращий спосіб змусити Minikube перевантажити Pods - це rollout restart.
+                        // Якщо ви використовували IMAGE_TAG = "${env.BUILD_ID}" і оновлювали deployment.yaml,
+                        // то тоді `kubectl set image` був би більш доречним.
                         echo "📝 Applying Kubernetes manifests..."
                         sh 'kubectl apply -f k8s/deployment.yaml'
                         sh 'kubectl apply -f k8s/service.yaml'
+
+                        echo "♻️ Rolling restart of deployment ${K8S_DEPLOYMENT_NAME}..."
+                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default"
+
 
                         echo "⏳ Waiting for deployment rollout to complete..."
                         timeout(time: 5, unit: 'MINUTES') {
@@ -153,6 +162,11 @@ pipeline {
                         }
 
                         echo "✅ Application deployed successfully to Minikube."
+
+                        // Отримання URL сервісу
+                        echo "🔗 Сервіс доступний за URL:"
+                        sh "minikube service ${K8S_SERVICE_NAME} --url"
+
                     } catch (e) {
                         echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
                         error "Minikube deployment failed"
