@@ -16,41 +16,34 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
-                echo 'Compiling the project...'
-                sh 'chmod +x ./mvnw'
-                sh './mvnw clean compile'
-            }
-        }
+stage('Build') {
+    steps {
+        echo 'Building the project (compile + package)...'
+        sh 'chmod +x ./mvnw'
+        echo 'Packaging the application...'
+        sh './mvnw clean package -DskipTests'
+    }
+}
 
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
-                sh './mvnw test'
-            }
-            post {
-                always {
-                    echo 'Archiving JUnit test results...'
-                    junit 'target/surefire-reports/*.xml'
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-                }
-            }
+stage('Test') {
+    steps {
+        echo 'Running tests...'
+        sh './mvnw test'
+    }
+    post {
+        always {
+            echo 'Archiving JUnit test results...'
+            junit 'target/surefire-reports/*.xml'
         }
+    }
+}
 
-        stage('Package') {
-            steps {
-                echo 'Packaging the application...'
-                sh './mvnw package -DskipTests'
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                echo 'Archiving the JAR file...'
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            }
-        }
+stage('Archive Artifacts') {
+    steps {
+        echo 'Archiving the JAR file...'
+        archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+    }
+}
 
         stage('Build Docker Image') {
             steps {
