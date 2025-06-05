@@ -46,22 +46,28 @@ stage('Archive Artifacts') {
     }
 }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+stage('Build Docker Image') {
+    steps {
+        script {
 
-                    try {
+                    sh 'ls -la workspace'
+                    sh 'cat workspace/Dockerfile'
+                    sh 'ls -la workspace/target'
+            echo "Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
 
-                        docker.build("${IMAGE_NAME}:${IMAGE_TAG}", ".")
-                        echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
-                    } catch (e) {
-                        echo "Failed to build Docker image: ${e.getMessage()}"
-                        error "Docker image build failed"
-                    }
-                }
+            try {
+
+                docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "workspace")
+
+                echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+            } catch (e) {
+                echo "Failed to build Docker image: ${e.getMessage()}"
+                error "Docker image build failed"
             }
         }
+    }
+}
+
         stage('Push Docker Image') {
             when { expression { env.IMAGE_TAG != 'latest' || someOtherCondition } }
             steps {
