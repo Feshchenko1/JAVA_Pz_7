@@ -160,6 +160,7 @@ stage('Deploy to Minikube') {
     }
 }
 
+
     post {
         success {
             echo '🎉 CI/CD Pipeline successfully completed! Application is deployed.'
@@ -171,3 +172,6 @@ stage('Deploy to Minikube') {
             echo '🔚 Pipeline finished.'
         }
     }
+}
+    }
+}
