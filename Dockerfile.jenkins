@@ -1,0 +1,11 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+# Встановити Docker CLI
+RUN apt-get update && apt-get install -y docker.io
+
+# Додати Jenkins користувача до docker групи
+RUN usermod -aG docker jenkins
+
+USER jenkins
