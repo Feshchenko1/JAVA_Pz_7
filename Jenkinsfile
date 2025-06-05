@@ -85,9 +85,9 @@ pipeline {
 
                     // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
                     echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-    # Отримуємо змінне оточення від minikube docker-env
+    //змінне оточення від minikube docker-env
     eval "$(minikube -p minikube docker-env)"
-    # Перевіряємо, чи Docker тепер доступний
+    //Перевіряємо, чи Docker тепер доступний
     docker info
     echo "DOCKER_HOST: $DOCKER_HOST"
     echo "DOCKER_CERT_PATH: $DOCKER_CERT_PATH"
