@@ -1,5 +1,12 @@
 pipeline {
  agent any
+     stages {
+         stage('Check Docker') {
+             steps {
+                 sh 'docker version'
+             }
+         }
+     }
     environment {
         IMAGE_NAME = "pz41-app"
         IMAGE_TAG = "latest"
