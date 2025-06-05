@@ -16,7 +16,7 @@ spec:
       containers:
         - name: springboot-app
           image: pz41-app:latest
-          imagePullPolicy: Never # Це нормально для локальних образів Minikube, якщо образ вже є
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:

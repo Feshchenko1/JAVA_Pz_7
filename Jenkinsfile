@@ -1,5 +1,4 @@
 pipeline {
-    agent any
     environment {
         IMAGE_NAME = "pz41-app"
         IMAGE_TAG = "latest"
@@ -9,6 +8,7 @@ pipeline {
 
     stages {
         stage('Checkout') {
+            agent any
             steps {
                 echo 'Fetching code from repository...'
                 checkout scm
@@ -32,6 +32,7 @@ pipeline {
                 always {
                     echo 'Archiving JUnit test results...'
                     junit 'target/surefire-reports/*.xml'
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
                 }
             }
         }
