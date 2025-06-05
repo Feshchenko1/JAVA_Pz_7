@@ -71,6 +71,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
+                            if (!fileExists('Dockerfile')) {
+                                error "❌ Dockerfile не знайдено в робочій директорії!"
+                            }
+                            echo '📋 Dockerfile знайдено. Продовжуємо...'
+
                     echo '📋 Перевіряємо вміст робочої директорії:'
                     sh 'ls -la $WORKSPACE'
                     echo '📋 Вивід Dockerfile:'
@@ -79,13 +84,20 @@ pipeline {
                     sh 'ls -la $WORKSPACE/target'
 
                     echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                                try {
+                                    sh 'docker info'
+                                } catch (e) {
+                                    error "❌ Docker daemon недоступний! Перевірте налаштування Jenkins агента."
+                                }
                     try {
                         docker.build("${IMAGE_NAME}:${IMAGE_TAG}", ".")
                         echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+
                     } catch (e) {
                         echo "❌ Failed to build Docker image: ${e.getMessage()}"
                         error "Docker image build failed"
                     }
+
                 }
             }
         }
@@ -113,6 +125,13 @@ pipeline {
         stage('Deploy to Minikube') {
             steps {
                 script {
+                 def kubectlVersion = sh(script: "kubectl version --client --short", returnStdout: true).trim()
+                            echo "ℹ️ Kubectl version: ${kubectlVersion}"
+
+                            def nodes = sh(script: "kubectl get nodes --no-headers | wc -l", returnStdout: true).trim()
+                            if (nodes == '0') {
+                                error "❌ Немає доступних нод у кластері Kubernetes!"
+                            }
                     echo "📦 Deploying to Minikube..."
                     try {
                         if (env.IMAGE_TAG == "latest") {
