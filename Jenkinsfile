@@ -92,13 +92,36 @@ stage('Build Docker Image') {
             sh 'ls -la $WORKSPACE/target'
 
             // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
+            // Тепер, коли minikube запущений з --driver=docker,
+            // minikube docker-env налаштує DOCKER_HOST на той, що використовує minikube,
+            // який буде доступний через той же сокет /var/run/docker.sock,
+            // який ми змонтували в Jenkins контейнер.
             echo "⚙️ Налаштовуємо Docker на Minikube демон..."
             sh """
                 # Ensure /usr/local/bin is in PATH for this session if it's not already
-                # (Jenkins often uses a simplified PATH for 'sh' steps)
                 export PATH="/usr/local/bin:/usr/bin:$PATH"
 
-                eval \$(minikube -p minikube docker-env)
+                # `minikube docker-env` виводить команди `export`.
+                # Нам потрібно виконати ці команди.
+                # Помилка "eval false exit code 85" зазвичай означає,
+                # що виведення minikube docker-env не є валідним для `eval`,
+                # або що minikube docker-env сам по собі завершився з помилкою.
+                # Додамо перевірку коду виходу minikube docker-env.
+                # Також, важливо, щоб `eval` отримав коректний вивід.
+                # Перевіримо, що виводить minikube docker-env
+                minikube_docker_env_output=\$(minikube -p minikube docker-env)
+                echo "Minikube docker-env output:"
+                echo "\${minikube_docker_env_output}"
+
+                # Виконаємо виведені змінні середовища
+                eval "\${minikube_docker_env_output}"
+
+                # Перевіряємо, що DOCKER_HOST встановлено
+                if [ -z "\${DOCKER_HOST}" ]; then
+                    echo "❌ DOCKER_HOST не був встановлений командою minikube docker-env."
+                    exit 1
+                fi
+
                 echo "DOCKER_HOST: \${DOCKER_HOST}"
                 echo "DOCKER_CERT_PATH: \${DOCKER_CERT_PATH}"
                 echo "DOCKER_TLS_VERIFY: \${DOCKER_TLS_VERIFY}"
