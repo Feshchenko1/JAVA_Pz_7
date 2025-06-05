@@ -1,11 +1,11 @@
 pipeline {
     agent any
+
     environment {
         IMAGE_NAME = "pz41-app"
-        IMAGE_TAG = "latest" // Для простоти використовуємо latest, оскільки в Minikube буде локальний образ
+        IMAGE_TAG = "latest"
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
-        // DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials' // Не потрібно, якщо не пушимо в Docker Hub
     }
 
     stages {
@@ -13,32 +13,14 @@ pipeline {
             steps {
                 echo '🔄 Fetching code from repository...'
                 checkout scm
-                echo '✅ Code checkout completed.'
-            }
-            post {
-                failure {
-                    echo '❌ Checkout failed! Перевірте налаштування доступу до Git.'
-                }
             }
         }
 
-        stage('Build') {
+        stage('Build & Package') {
             steps {
-                echo '🔧 Building the project (compile + package)...'
+                echo '🔧 Compiling and packaging the project...'
                 sh 'chmod +x ./mvnw'
-                echo '📦 Packaging the application...'
                 sh './mvnw clean package -DskipTests'
-            }
-            post {
-                success {
-                    echo '✅ Build and packaging successful.'
-                }
-                failure {
-                    echo '❌ Build failed! Перевірте лог збірки Maven.'
-                }
-                unstable {
-                    echo '⚠️ Build completed з попередженнями. Перевірте залежності Maven.'
-                }
             }
         }
 
@@ -49,14 +31,7 @@ pipeline {
             }
             post {
                 always {
-                    echo '📁 Archiving JUnit test results...'
                     junit 'target/surefire-reports/*.xml'
-                }
-                success {
-                    echo '✅ Tests passed successfully.'
-                }
-                failure {
-                    echo '❌ Тести не пройшли! Перевірте результати тестування.'
                 }
             }
         }
@@ -68,121 +43,58 @@ pipeline {
             }
         }
 
-stage('Build Docker Image') {
-    steps {
-        script {
-            if (!fileExists('Dockerfile')) {
-                error "❌ Dockerfile не знайдено в робочій диреторії!"
-            }
-            echo '📋 Dockerfile знайдено. Продовжуємо...'
-
-            // Додайте ці рядки для відладки
-            echo "Environment PATH: ${env.PATH}"
-            sh 'which docker || echo "docker not found in PATH"'
-            sh 'which minikube || echo "minikube not found in PATH"'
-            sh 'which kubectl || echo "kubectl not found in PATH"'
-            sh 'ls -l /usr/local/bin/minikube || echo "minikube binary not at /usr/local/bin"'
-            sh 'ls -l /usr/bin/docker || echo "docker binary not at /usr/bin"'
-
-            echo '📋 Перевіряємо вміст робочої директорії:'
-            sh 'ls -la $WORKSPACE'
-            echo '📋 Вивід Dockerfile:'
-            sh 'cat $WORKSPACE/Dockerfile'
-            echo '📋 Вміст папки target:'
-            sh 'ls -la $WORKSPACE/target'
-
-            // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
-            // Тепер, коли minikube запущений з --driver=docker,
-            // minikube docker-env налаштує DOCKER_HOST на той, що використовує minikube,
-            // який буде доступний через той же сокет /var/run/docker.sock,
-            // який ми змонтували в Jenkins контейнер.
-            echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-            sh """
-                # Ensure /usr/local/bin is in PATH for this session if it's not already
-                export PATH="/usr/local/bin:/usr/bin:$PATH"
-
-                # `minikube docker-env` виводить команди `export`.
-                # Нам потрібно виконати ці команди.
-                # Помилка "eval false exit code 85" зазвичай означає,
-                # що виведення minikube docker-env не є валідним для `eval`,
-                # або що minikube docker-env сам по собі завершився з помилкою.
-                # Додамо перевірку коду виходу minikube docker-env.
-                # Також, важливо, щоб `eval` отримав коректний вивід.
-                # Перевіримо, що виводить minikube docker-env
-                minikube_docker_env_output=\$(minikube -p minikube docker-env)
-                echo "Minikube docker-env output:"
-                echo "\${minikube_docker_env_output}"
-
-                # Виконаємо виведені змінні середовища
-                eval "\${minikube_docker_env_output}"
-
-                # Перевіряємо, що DOCKER_HOST встановлено
-                if [ -z "\${DOCKER_HOST}" ]; then
-                    echo "❌ DOCKER_HOST не був встановлений командою minikube docker-env."
-                    exit 1
-                fi
-
-                echo "DOCKER_HOST: \${DOCKER_HOST}"
-                echo "DOCKER_CERT_PATH: \${DOCKER_CERT_PATH}"
-                echo "DOCKER_TLS_VERIFY: \${DOCKER_TLS_VERIFY}"
-
-                echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
-            """
-        }
-    }
-}
-
-stage('Deploy to Minikube') {
-    steps {
-        script {
-            echo "⚙️ Налаштовуємо Kubectl на контекст Minikube..."
-            sh """
-                export PATH="/usr/local/bin:/usr/bin:$PATH"
-                kubectl config use minikube
-                kubectl config current-context
-            """
-
-            def kubectlVersion = sh(script: "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"; kubectl version --client --short", returnStdout: true).trim()
-            echo "ℹ️ Kubectl version: ${kubectlVersion}"
-
-            def nodes = sh(script: "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"; kubectl get nodes --no-headers | wc -l", returnStdout: true).trim()
-            if (nodes == '0') {
-                error "❌ Немає доступних нод у кластері Kubernetes! Переконайтесь, що Minikube запущено."
-            }
-            echo "📦 Deploying to Minikube..."
-            try {
-                echo "📝 Applying Kubernetes manifests..."
-                sh """
-                    export PATH="/usr/local/bin:/usr/bin:$PATH"
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
-                """
-
-                echo "♻️ Rolling restart of deployment ${K8S_DEPLOYMENT_NAME}..."
-                sh "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"; kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default"
-
-
-                echo "⏳ Waiting for deployment rollout to complete..."
-                timeout(time: 5, unit: 'MINUTES') {
-                    sh "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"; kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true"
+        // --- Етап збірки образу (СПРОЩЕНО) ---
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                    // Оскільки Jenkins і Minikube використовують один Docker-демон,
+                    // ця команда просто збере збірний образ, який Minikube зможе використовувати.
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
                 }
+            }
+        }
 
-                echo "✅ Application deployed successfully to Minikube."
+        // --- Етап розгортання (ТРОХИ ЗМІНЕНО) ---
+        stage('Deploy to Minikube') {
+            steps {
+                script {
+                    echo "🚀 Deploying to Minikube..."
+                    try {
+                        // Важливо: команда kubectl, виконана з Jenkins, буде працювати,
+                        // оскільки конфігурація kubectl зазвичай зберігається у файлі
+                        // (~/.kube/config), який може бути доступний, або Jenkins
+                        // налаштований на роботу з кластером.
 
-                // Отримання URL сервісу
-                echo "🔗 Сервіс доступний за URL:"
-                sh "export PATH=\"/usr/local/bin:/usr/bin:$PATH\"; minikube service ${K8S_SERVICE_NAME} --url"
+                        echo "📝 Applying Kubernetes manifests..."
+                        sh 'kubectl apply -f k8s/deployment.yaml'
+                        sh 'kubectl apply -f k8s/service.yaml'
 
-            } catch (e) {
-                echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
-                error "Minikube deployment failed"
+                        echo "♻️ Triggering a rollout restart to apply the new image..."
+                        // Це надійний спосіб змусити Kubernetes оновити поди,
+                        // навіть якщо тег 'latest' і imagePullPolicy: Never.
+                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default"
+
+                        echo "⏳ Waiting for deployment rollout to complete..."
+                        timeout(time: 5, unit: 'MINUTES') {
+                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true"
+                        }
+
+                        echo "✅ Application deployed successfully to Minikube."
+
+                        // Отримання URL сервісу
+                        echo "🔗 Service URL:"
+                        sh "minikube service ${K8S_SERVICE_NAME} --url"
+
+                    } catch (e) {
+                        echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
+                        error "Minikube deployment failed"
+                    }
+                }
             }
         }
     }
-}}
-
 
     post {
         success {
@@ -190,9 +102,6 @@ stage('Deploy to Minikube') {
         }
         failure {
             echo '🚨 CI/CD Pipeline failed! Check above logs for details.'
-        }
-        always {
-            echo '🔚 Pipeline finished.'
         }
     }
 }
