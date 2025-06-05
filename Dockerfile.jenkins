@@ -17,20 +17,23 @@ RUN apt-get update && \
     curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
     echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \
     \
-    apt-get update
-
-# Install Docker CLI tools and kubectl
-RUN apt-get install -y \
+    apt-get update && \
+    \
+    # Install Docker CLI tools and kubectl
+    apt-get install -y \
     docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
     kubectl \
-    --no-install-recommends
+    --no-install-recommends && \
+    \
+    # Add Jenkins user to docker group
+    usermod -aG docker jenkins
 
-# Install minikube (still from direct download, as it's not in default apt repos)
+# Install minikube
 RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && \
     install minikube-linux-amd64 /usr/local/bin/minikube && \
     rm minikube-linux-amd64
 
-# Clean up apt cache and verify installations
+# Clean up apt cache
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
