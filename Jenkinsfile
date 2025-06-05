@@ -84,27 +84,18 @@ pipeline {
                     sh 'ls -la $WORKSPACE/target'
 
                     // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
-                    echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-                    echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-    //Отримуємо змінне оточення від minikube docker-env
-    sh 'eval $(minikube -p minikube docker-env)'
-    //Перевіряємо, чи Docker тепер доступний
-    sh 'docker info'
-    echo "DOCKER_HOST: ${DOCKER_HOST}"
-    echo "DOCKER_CERT_PATH: ${DOCKER_CERT_PATH}"
-    echo "DOCKER_TLS_VERIFY: ${DOCKER_TLS_VERIFY}"
+            echo "⚙️ Налаштовуємо Docker на Minikube демон..."
+            // Об'єднуємо налаштування середовища та подальші Docker команди в один sh блок
+            sh '''
+                eval $(minikube -p minikube docker-env)
+                echo "DOCKER_HOST: ${DOCKER_HOST}"
+                echo "DOCKER_CERT_PATH: ${DOCKER_CERT_PATH}"
+                echo "DOCKER_TLS_VERIFY: ${DOCKER_TLS_VERIFY}"
 
-                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                    try {
-                        // Використовуємо звичайний 'sh' для docker build, оскільки 'docker.build' (Jenkins Docker Pipeline plugin)
-                        // може не повністю працювати з Minikube docker-env.
-                        // Або ж, можна спробувати docker.withRegistry для локального registry, якщо попередній варіант не працює
-                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                        echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
-                    } catch (e) {
-                        echo "❌ Failed to build Docker image: ${e.getMessage()}"
-                        error "Docker image build failed"
-                    }
+                echo "🐳 Building Docker image <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG}..."
+                docker build -t <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG} .
+                echo "✅ Docker image <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG} built successfully."
+            '''
                 }
             }
         }
