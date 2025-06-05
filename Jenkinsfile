@@ -68,7 +68,7 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+stage('Build Docker Image') {
             steps {
                 script {
                     if (!fileExists('Dockerfile')) {
@@ -84,22 +84,21 @@ pipeline {
                     sh 'ls -la $WORKSPACE/target'
 
                     // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
-            echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-            // Об'єднуємо налаштування середовища та подальші Docker команди в один sh блок
-            sh '''
-                eval $(minikube -p minikube docker-env)
-                echo "DOCKER_HOST: ${DOCKER_HOST}"
-                echo "DOCKER_CERT_PATH: ${DOCKER_CERT_PATH}"
-                echo "DOCKER_TLS_VERIFY: ${DOCKER_TLS_VERIFY}"
+                    echo "⚙️ Налаштовуємо Docker на Minikube демон..."
+                    // Об'єднуємо налаштування середовища та подальші Docker команди в один sh блок
+                    sh """
+                        eval $(minikube -p minikube docker-env)
+                        echo "DOCKER_HOST: \${DOCKER_HOST}"
+                        echo "DOCKER_CERT_PATH: \${DOCKER_CERT_PATH}"
+                        echo "DOCKER_TLS_VERIFY: \${DOCKER_TLS_VERIFY}"
 
-                echo "🐳 Building Docker image <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG}..."
-                docker build -t <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG} .
-                echo "✅ Docker image <span class="math-inline">\{IMAGE\_NAME\}\:</span>{IMAGE_TAG} built successfully."
-            '''
+                        echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+                    """
                 }
             }
         }
-
         // Stage 'Push Docker Image' може бути видалений або зроблений умовним,
         // якщо ви НЕ плануєте пушити образ в зовнішній реєстр для Minikube.
         // Для локального розгортання через `minikube docker-env` це не потрібно.
