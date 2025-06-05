@@ -85,7 +85,11 @@ pipeline {
 
                     // **ВАЖЛИВО:** Налаштовуємо Docker CLI на Minikube Daemon
                     echo "⚙️ Налаштовуємо Docker на Minikube демон..."
-                    sh 'eval $(minikube -p minikube docker-env)'
+                                // Виконайте команди від root, якщо є проблеми з дозволами jenkins користувача
+                                // sh 'sudo eval $(minikube -p minikube docker-env)' // sudo може не бути в PATH або не працювати
+                                sh 'su -c "eval $(minikube -p minikube docker-env)" root' // Спроба виконати від root
+                                sh 'su -c "docker info" root'
+                                sh 'su -c "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ." root'
                     sh 'docker info' // Перевіряємо, чи тепер бачимо Docker Daemon Minikube
 
                     echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
