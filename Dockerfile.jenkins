@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     lsb-release \
-    netcat-openbsd \ # Додаємо netcat для діагностики, якщо ще не було
+    netcat-openbsd \
     git \
     maven \
     unzip
@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /etc/apt/keyrings
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 RUN echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 # Встановлюємо Docker CLI
 RUN apt-get update && apt-get install -y docker-ce-cli
@@ -32,35 +32,7 @@ RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 RUN install -o root -g root -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
 
-# Jenkins користувач за замовчуванням: jenkins
-# Ми повинні додати користувача jenkins до групи 'docker' з правильним GID
-# Змініть 999 на GID, який ви знайшли на кроці 1
 ARG DOCKER_GID=999
-RUN groupadd -g ${DOCKER_GID} docker_new || true # Створюємо тимчасову групу з потрібним GID
-RUN usermod -aG docker_new jenkins # Додаємо jenkins до цієї групи
-
-# Важливо: Якщо docker_new вже існує з іншим GID, вам може знадобитися більш складний сценарій:
-# 1. Видалити існуючу групу docker (якщо вона була створена з неправильним GID)
-#    RUN groupdel docker || true
-# 2. Створити групу docker з потрібним GID
-#    RUN groupadd -g ${DOCKER_GID} docker
-# 3. Додати користувача jenkins до цієї групи
-#    RUN usermod -aG docker jenkins
-
-# Простіше: якщо docker.sock на хості має GID X, нам потрібно, щоб jenkins мав доступ до нього.
-# Якщо група docker вже є, і у неї інший GID, нам потрібно або:
-# - змінити GID існуючої групи docker в контейнері (складніше)
-# - або просто додати jenkins до існуючої групи docker, а потім *змінити GID файлу /var/run/docker.sock* на хості (що може бути неможливо без root прав або нестабільно)
-# - або, **найкращий варіант**, ми використаємо GID групи docker хоста.
-
-# Давайте спробуємо так:
-# 1. Дізнайтеся GID групи docker на хості (WSL2 VM): grep docker /etc/group -> наприклад, 999
-# 2. Додайте цю лінію у ваш Dockerfile.jenkins
-RUN groupadd -r docker -g 999 || true # Створюємо групу docker з конкретним GID, якщо її немає
-RUN usermod -aG docker jenkins # Додаємо користувача jenkins до цієї групи docker
+RUN groupadd -g ${DOCKER_GID} docker || true && usermod -aG docker jenkins
 
 USER jenkins
-
-# Тепер, коли ви запустите контейнер:
-# docker build -t jenkins-with-docker-kubectl --build-arg DOCKER_GID=999 .
-# docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
