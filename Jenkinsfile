@@ -44,43 +44,17 @@ pipeline {
         }
 
         // --- Етап збірки образу (СПРОЩЕНО) ---
-// В Jenkinsfile, перед тим як використовувати docker build
-stage('Build Docker Image') {
-    steps {
-        script {
-            echo "⚙️ Configuring Docker for Minikube demon..."
-            // Ця команда встановить змінні середовища Docker для поточної оболонки
-            // так, щоб docker CLI звертався до Docker-демона Minikube.
-            // Вона виводить команди, які потрібно виконати.
-            def dockerEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
-            // Jenkinsfile не має 'eval'. Замість цього, ми можемо парсити вивід
-            // і встановити змінні середовища програмно.
-            // Вивід minikube docker-env виглядає як:
-            // export DOCKER_TLS_VERIFY="1"
-            // export DOCKER_HOST="tcp://192.168.49.2:2376"
-            // export DOCKER_CERT_PATH="/home/jenkins/.minikube/certs"
-            // export DOCKER_CONTAINERD_UI_TCP_ADDR=""
-            // # To point your shell to minikube's docker-daemon, run:
-            // # eval $(minikube -p minikube docker-env)
-
-            // Парсимо вивід і встановлюємо змінні середовища для поточного кроку.
-            dockerEnv.split('\n').each { line ->
-                if (line.startsWith('export ')) {
-                    def parts = line.substring('export '.length()).split('=', 2)
-                    if (parts.length == 2) {
-                        env."${parts[0].trim()}" = parts[1].trim().replace("\"", "")
-                    }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                    // Оскільки Jenkins і Minikube використовують один Docker-демон,
+                    // ця команда просто збере збірний образ, який Minikube зможе використовувати.
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
                 }
             }
-            echo "✅ Docker environment configured."
-
-            echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-            // Тепер docker build буде використовувати демон Minikube
-            sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
         }
-    }
-}
 
         // --- Етап розгортання (ТРОХИ ЗМІНЕНО) ---
         stage('Deploy to Minikube') {
