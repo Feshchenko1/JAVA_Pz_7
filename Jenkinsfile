@@ -6,6 +6,7 @@ pipeline {
         IMAGE_TAG = "latest"
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
+        MINIKUBE_HOME = "/home/jenkins"
     }
 
     stages {
@@ -47,6 +48,7 @@ pipeline {
             steps {
                 script {
                     echo "⚙️ Configuring Docker for Minikube demon..."
+                    sh 'export MINIKUBE_HOME="/home/jenkins"'
                     def dockerEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
                     dockerEnv.split('\n').each { line ->
                         if (line.startsWith('export ')) {
