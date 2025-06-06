@@ -27,6 +27,9 @@
     </scm>
     <properties>
         <java.version>17</java.version>
+        <spring.datasource.url>jdbc:mysql://localhost:3306/pz_5_db</spring.datasource.url>
+        <spring.datasource.username>root</spring.datasource.username>
+        <spring.datasource.password>admin</spring.datasource.password>
     </properties>
 
 
@@ -110,8 +113,19 @@
         </dependency>
     </dependencies>
 
+
+
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>10.20.1</version> <configuration>
+                <url>${spring.datasource.url}</url>
+                <user>${spring.datasource.username}</user>
+                <password>${spring.datasource.password}</password>
+            </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
