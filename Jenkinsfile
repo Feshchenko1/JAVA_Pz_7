@@ -7,6 +7,7 @@ pipeline {
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
         MINIKUBE_HOME = "/home/jenkins"
+        DOCKER_HOST = "tcp://host.docker.internal:2375"
     }
 
     stages {
@@ -48,13 +49,21 @@ pipeline {
             steps {
                 script {
                     echo "⚙️ Configuring Docker for Minikube demon..."
-                    sh 'export MINIKUBE_HOME="/home/jenkins"'
+                    // Ця лінія тепер може бути видалена, якщо DOCKER_HOST вже в environment {}
+                    // sh 'export MINIKUBE_HOME="/home/jenkins"'
+                    // Цей шмат коду для парсингу docker-env більше не потрібен для налаштування Docker!
+                    // Оскільки ми прямо вказуємо DOCKER_HOST, minikube docker-env не потрібен для Docker,
+                    // але він все ще потрібен для Minikube, щоб дізнатися env для Minikube.
+                    // Давайте залишимо його, оскільки він також надає KUBECONFIG та інші змінні.
                     def dockerEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
                     dockerEnv.split('\n').each { line ->
                         if (line.startsWith('export ')) {
                             def parts = line.substring('export '.length()).split('=', 2)
                             if (parts.length == 2) {
-                                env."${parts[0].trim()}" = parts[1].trim().replace("\"", "")
+                                // Тут ми можемо пропустити DOCKER_HOST, якщо він вже встановлений
+                                if (parts[0].trim() != "DOCKER_HOST") {
+                                    env."${parts[0].trim()}" = parts[1].trim().replace("\"", "")
+                                }
                             }
                         }
                     }
