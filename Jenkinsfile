@@ -8,6 +8,10 @@ pipeline {
         K8S_SERVICE_NAME = "pz41-app-service"
         MINIKUBE_HOME = "/home/jenkins"
         DOCKER_HOST = "tcp://host.docker.internal:2375"
+
+                HTTP_PROXY = "http://http.docker.internal:3128"
+                HTTPS_PROXY = "http://http.docker.internal:3128"
+                NO_PROXY = "hubproxy.docker.internal,127.0.0.1,localhost"
     }
 
     stages {
@@ -45,36 +49,43 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "⚙️ Configuring Docker for Minikube demon..."
-                    // Ця лінія тепер може бути видалена, якщо DOCKER_HOST вже в environment {}
-                    // sh 'export MINIKUBE_HOME="/home/jenkins"'
-                    // Цей шмат коду для парсингу docker-env більше не потрібен для налаштування Docker!
-                    // Оскільки ми прямо вказуємо DOCKER_HOST, minikube docker-env не потрібен для Docker,
-                    // але він все ще потрібен для Minikube, щоб дізнатися env для Minikube.
-                    // Давайте залишимо його, оскільки він також надає KUBECONFIG та інші змінні.
-                    def dockerEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
-                    dockerEnv.split('\n').each { line ->
-                        if (line.startsWith('export ')) {
-                            def parts = line.substring('export '.length()).split('=', 2)
-                            if (parts.length == 2) {
-                                // Тут ми можемо пропустити DOCKER_HOST, якщо він вже встановлений
-                                if (parts[0].trim() != "DOCKER_HOST") {
-                                    env."${parts[0].trim()}" = parts[1].trim().replace("\"", "")
-                                }
+stages {
+    stage('Build Docker Image') {
+        steps {
+            script {
+                echo "⚙️ Configuring Docker and Minikube environment..."
+
+                // Проксі (якщо потрібно)
+                sh 'export HTTP_PROXY="${HTTP_PROXY}"'
+                sh 'export HTTPS_PROXY="${HTTPS_PROXY}"'
+                sh 'export NO_PROXY="${NO_PROXY}"'
+
+                // Отримуємо змінні середовища від Minikube
+                def minikubeEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
+
+                // Парсимо змінні середовища та додаємо їх у середовище Jenkins, крім DOCKER_HOST і проксі
+                minikubeEnv.split('\n').each { line ->
+                    if (line.startsWith('export ')) {
+                        def parts = line.substring('export '.length()).split('=', 2)
+                        if (parts.length == 2) {
+                            def key = parts[0].trim()
+                            def value = parts[1].trim().replaceAll('"', '')
+                            if (!(key in ['DOCKER_HOST', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
+                                env."${key}" = value
                             }
                         }
                     }
-                    echo "✅ Docker environment configured."
-
-                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
                 }
+
+                echo "✅ Docker and Minikube environment configured."
+
+                // Збірка Docker-образу
+                echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
             }
         }
+    }
 
         stage('Deploy to Minikube') {
             steps {
