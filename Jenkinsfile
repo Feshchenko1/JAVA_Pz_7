@@ -50,48 +50,53 @@ pipeline {
         }
 
 stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "⚙️ Configuring Docker and Minikube environment..."
+    steps {
+        script {
+            echo "⚙️ Configuring Docker and Minikube environment..."
 
-                    // Step 1: Build Docker image on the host's Docker daemon.
-                    // This requires explicitly unsetting DOCKER_HOST and providing proxy settings.
-                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} on host Docker..."
-                    sh """
-                        unset DOCKER_HOST # Ensure we use the local /var/run/docker.sock for this build
-                        HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" NO_PROXY="${NO_PROXY}" docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                    """
-                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+            // Get Minikube's IP address
+            def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
+            echo "💡 Minikube IP detected: ${minikubeIp}"
 
-                    // Step 2: Now, source Minikube's environment to set up kubectl to talk to the Minikube cluster.
-                    // This will include KUBECONFIG and any other necessary Minikube-specific variables.
-                    echo "🔄 Sourcing Minikube environment for kubectl..."
-                    def minikubeEnvCommand = "minikube -p minikube docker-env --shell bash" // Use bash shell to get export commands
-                    def minikubeEnvOutput = sh(script: minikubeEnvCommand, returnStdout: true).trim()
+            // Source Minikube Docker environment variables, but specifically adjust DOCKER_HOST
+            // We want to use the actual Minikube IP, not 127.0.0.1 which is misleading in a containerized Jenkins.
+            echo "🔄 Sourcing Minikube Docker environment to build image directly into Minikube..."
 
-                    // Parse the output and set environment variables in Jenkins
-                    minikubeEnvOutput.split('\n').each { line ->
-                        if (line.startsWith('export ')) {
-                            def parts = line.substring('export '.length()).split('=', 2)
-                            if (parts.length == 2) {
-                                def key = parts[0].trim()
-                                def value = parts[1].trim().replaceAll('"', '')
-                                // Set ALL environment variables from minikube docker-env
-                                // except the proxy ones which we manage globally in Jenkins environment block.
-                                // We also explicitly want to NOT set DOCKER_HOST here if we are ALWAYS using the host's Docker daemon
-                                // for general docker commands. If you *do* want to use minikube's docker daemon later,
-                                // then remove 'DOCKER_HOST' from this exclusion list.
-                                if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
-                                    env."${key}" = value
-                                    echo "   - Setting env: ${key}=${value}" // For debugging
-                                }
-                            }
+            // Get the raw docker-env output (often has 127.0.0.1)
+            def minikubeDockerEnvOutput = sh(script: 'minikube -p minikube docker-env --shell bash', returnStdout: true).trim()
+
+            // Apply environment variables from minikube docker-env
+            minikubeDockerEnvOutput.split('\n').each { line ->
+                if (line.startsWith('export ')) {
+                    def parts = line.substring('export '.length()).split('=', 2)
+                    if (parts.length == 2) {
+                        def key = parts[0].trim()
+                        def value = parts[1].trim().replaceAll('"', '')
+                        // Exclude proxy variables as they are set globally
+                        if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
+                            env."${key}" = value
+                            echo "   - Setting env: ${key}=${value}" // For debugging
                         }
                     }
-                    echo "✅ Minikube environment variables sourced for kubectl/minikube."
                 }
             }
+
+            // OVERRIDE DOCKER_HOST to use the actual Minikube IP
+            // This is the crucial part. The port comes from the original docker-env output.
+            def minikubeDockerPort = (env.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376" // Default to 2376 if not found
+            env.DOCKER_HOST = "tcp://${minikubeIp}:${minikubeDockerPort}"
+            echo "   - Overriding DOCKER_HOST to: ${env.DOCKER_HOST}"
+            echo "✅ Minikube Docker environment variables sourced and adjusted."
+
+            // Build Docker image directly into Minikube's Docker daemon.
+            echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
+            // Ensure Docker build command itself passes through the Jenkins environment variables,
+            // which now correctly contain the Minikube DOCKER_HOST.
+            sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
         }
+    }
+}
 
 stage('Deploy to Minikube') {
             steps {
