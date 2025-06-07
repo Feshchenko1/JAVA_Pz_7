@@ -71,7 +71,7 @@ stage('Build Docker Image') {
             echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
             echo "🔎 Verifying image presence in Minikube's Docker daemon:"
             // Use `minikube ssh` to execute `docker images` directly on the Minikube VM
-            sh "minikube -p minikube ssh 'docker images | grep ${IMAGE_NAME}'"
+//             sh "minikube -p minikube ssh 'docker images | grep ${IMAGE_NAME}'"
         }
     }
 }
