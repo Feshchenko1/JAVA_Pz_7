@@ -65,11 +65,13 @@ stage('Build Docker Image') {
     steps {
         script {
             echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon using minikube image build..."
-            // Set Docker environment to Minikube's
-            sh 'eval $(minikube -p minikube docker-env)' // This sets DOCKER_HOST, DOCKER_TLS_VERIFY, etc.
-            sh 'docker images' // Verify images in Minikube's Docker daemon
+            // This command builds the image directly into Minikube's Docker daemon.
+            // No need for `eval $(minikube docker-env)` here for `minikube image build`.
             sh "minikube -p minikube image build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
+            echo "🔎 Verifying image presence in Minikube's Docker daemon:"
+            // Use `minikube ssh` to execute `docker images` directly on the Minikube VM
+            sh "minikube -p minikube ssh 'docker images | grep ${IMAGE_NAME}'"
         }
     }
 }
@@ -108,16 +110,13 @@ stage('Deploy to Minikube') {
                         sh "kubectl delete service ${K8S_SERVICE_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --ignore-not-found=true --insecure-skip-tls-verify"
 
 
-                        echo "📝 Applying Kubernetes manifests..."
-                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
-                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
+                echo "📝 Applying Kubernetes manifests..."
+                sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
+                sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
 
-                        echo "♻️ Triggering a rollout restart to apply the new image..."
-                        // Rollout restart потрібен тільки якщо ви хочете примусово оновити вже існуючий Deployment
-                        // Після kubectl delete і kubectl apply, rollout restart не потрібен, оскільки створюються нові поди.
-                        // Але залишимо його, якщо ви плануєте використовувати kubectl apply для оновлень, а не видалення/створення.
-                        // Можна також використовувати `kubectl rollout status` без `restart`, якщо це перший запуск.
-                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
+
+                echo "♻️ Triggering a rollout restart to apply the new image..."
+                sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
 
 
                         echo "⏳ Waiting for deployment rollout to complete..."
@@ -125,11 +124,14 @@ stage('Deploy to Minikube') {
                             sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
                         }
 
-                        echo "✅ Application deployed successfully to Minikube."
-                        echo "🔗 Service URL:"
-                        sh "minikube service ${K8S_SERVICE_NAME} --url"
-
-                    }  catch (e) {
+                echo "⏳ Waiting for deployment rollout to complete..."
+                timeout(time: 5, unit: 'MINUTES') {
+                    sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
+                }
+                echo "✅ Application deployed successfully to Minikube."
+                                echo "🔗 Service URL:"
+                                sh "minikube service ${K8S_SERVICE_NAME} --url"
+                  catch (e) {
                                             echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
 
                                             echo "--- DIAGNOSTIC INFORMATION ---"
