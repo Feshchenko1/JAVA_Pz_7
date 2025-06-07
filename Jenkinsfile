@@ -98,52 +98,48 @@ stage('Deploy to Minikube') {
                 script {
                     echo "🚀 Deploying to Minikube..."
                     try {
-                        // Get Minikube IP address (this is the VM's internal IP, not directly used for host access)
                         def minikubeInternalIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
                         echo "   - Minikube Internal IP: ${minikubeInternalIp}"
 
-                        // Explicitly set KUBECONFIG to the mounted path early
                         env.KUBECONFIG = "/home/jenkins/.kube/config"
                         echo "   - Setting KUBECONFIG=${env.KUBECONFIG}"
 
-                        // Using double quotes for Groovy interpolation:
-                        def minikubeApiServerUrl = sh(script: "KUBECONFIG=${env.KUBECONFIG} kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}'", returnStdout: true).trim()
+                        // Use --insecure-skip-tls-verify here as well for kubectl config view
+                        def minikubeApiServerUrl = sh(script: "KUBECONFIG=${env.KUBECONFIG} kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}' --insecure-skip-tls-verify", returnStdout: true).trim()
                         echo "   - Minikube API Server URL (from host's kubeconfig): ${minikubeApiServerUrl}"
 
-                        // Extract the port from the URL (e.g., https://127.0.0.1:51522 -> 51522)
                         def minikubeApiServerPort = (minikubeApiServerUrl =~ /:(\d+)$/)[0][1]
                         echo "   - Minikube API Server Port: ${minikubeApiServerPort}"
 
-
                         // --- IMPORTANT: Dynamically fix paths and server in kubeconfig for Jenkins container ---
-                        // Use host.docker.internal to access the API server from inside the container
                         sh "kubectl config set-cluster minikube --server=https://host.docker.internal:${minikubeApiServerPort} --kubeconfig=${env.KUBECONFIG}"
-                        // Ensure certificate paths are correct for the mounted volumes in Jenkins container
                         sh "kubectl config set-credentials minikube --client-certificate=/home/jenkins/.minikube/profiles/minikube/client.crt --client-key=/home/jenkins/.minikube/profiles/minikube/client.key --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
                         sh "kubectl config set-cluster minikube --certificate-authority=/home/jenkins/.minikube/ca.crt --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
                         // -------------------------------------------------------------------------------------
 
-                        // Now, run kubectl config commands to verify
-                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG}"
-                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG}"
+                        echo "   - Verifying kubeconfig setup (with --insecure-skip-tls-verify)..."
+                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
+                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
 
                         echo "📝 Applying Kubernetes manifests..."
-                        // ADDED --validate=false HERE
-                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false"
-                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false" // Adding here for consistency
+                        // ADDED --insecure-skip-tls-verify here
+                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
+                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
 
                         echo "♻️ Triggering a rollout restart to apply the new image..."
-                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG}"
+                        // ADDED --insecure-skip-tls-verify here
+                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
 
                         echo "⏳ Waiting for deployment rollout to complete..."
                         timeout(time: 5, unit: 'MINUTES') {
-                            // ADDED --validate=false HERE
-                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --validate=false"
+                            // ADDED --insecure-skip-tls-verify here
+                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
                         }
 
                         echo "✅ Application deployed successfully to Minikube."
 
                         echo "🔗 Service URL:"
+                        // minikube service does not interact with the API server in the same way, so it doesn't need --insecure-skip-tls-verify
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
                     } catch (e) {
