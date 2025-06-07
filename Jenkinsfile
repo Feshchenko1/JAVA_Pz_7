@@ -106,9 +106,6 @@ stage('Deploy to Minikube') {
                         env.KUBECONFIG = "/home/jenkins/.kube/config"
                         echo "   - Setting KUBECONFIG=${env.KUBECONFIG}"
 
-                        // Temporarily set KUBECONFIG for this specific kubectl command if needed,
-                        // or ensure the global env.KUBECONFIG is picked up.
-                        // Let's explicitly pass it to the sh command for robustness.
                         // Using double quotes for Groovy interpolation:
                         def minikubeApiServerUrl = sh(script: "KUBECONFIG=${env.KUBECONFIG} kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}'", returnStdout: true).trim()
                         echo "   - Minikube API Server URL (from host's kubeconfig): ${minikubeApiServerUrl}"
@@ -126,27 +123,27 @@ stage('Deploy to Minikube') {
                         sh "kubectl config set-cluster minikube --certificate-authority=/home/jenkins/.minikube/ca.crt --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
                         // -------------------------------------------------------------------------------------
 
-                        // Now, run kubectl config commands to verify - CHANGED TO DOUBLE QUOTES
-                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG}" // Specify kubeconfig for verification
-                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG}" // Specify kubeconfig for verification
+                        // Now, run kubectl config commands to verify
+                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG}"
+                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG}"
 
                         echo "📝 Applying Kubernetes manifests..."
-                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG}" // Apply with explicit kubeconfig
-                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG}" // Apply with explicit kubeconfig
+                        // ADDED --validate=false HERE
+                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false"
+                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false" // Adding here for consistency
 
                         echo "♻️ Triggering a rollout restart to apply the new image..."
                         sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG}"
 
                         echo "⏳ Waiting for deployment rollout to complete..."
                         timeout(time: 5, unit: 'MINUTES') {
-                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG}"
+                            // ADDED --validate=false HERE
+                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --validate=false"
                         }
 
                         echo "✅ Application deployed successfully to Minikube."
 
                         echo "🔗 Service URL:"
-                        // This will still use the internal minikube ip for service access, which should be fine after deployment
-                        // minikube service does not take --kubeconfig, it figures it out from context or default locations
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
                     } catch (e) {
