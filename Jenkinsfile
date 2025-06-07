@@ -11,7 +11,7 @@ pipeline {
         // Proxy variables remain
         HTTP_PROXY = "http://http.docker.internal:3128"
         HTTPS_PROXY = "http://http.docker.internal:3128"
-        NO_PROXY = "hubproxy.docker.internal,127.0.0.1,localhost"
+        NO_PROXY = "hubproxy.docker.internal,127.0.0.1,localhost,192.168.49.2"
     }
 
     stages {
