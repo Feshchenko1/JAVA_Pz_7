@@ -127,13 +127,28 @@ stage('Deploy to Minikube') {
                         // minikube service --url не потребує --kubeconfig, оскільки він сам знає, де знайти Minikube.
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
-                    } catch (e) {
-                        echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
-                        // ... (ваші діагностичні кроки, які вже мають --insecure-skip-tls-verify)
-                        error "Minikube deployment failed"
-                    }
-                }
-            }
+                    } } catch (e) {
+                                              echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
+
+                                              echo "--- DIAGNOSTIC INFORMATION ---"
+                                              echo "Retrieving deployment status:"
+                                              sh "kubectl describe deployment ${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify || true" // <-- ДОДАНО
+                                              echo "Retrieving pod statuses:"
+                                              sh "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o wide --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify || true" // <-- ДОДАНО
+
+                                              echo "Retrieving logs from potentially problematic pods (adjust selector if needed):"
+                      def podNames = sh(script: "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o jsonpath='{.items[*].metadata.name}' --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify || true", returnStdout: true).trim()
+                      if (podNames) { // Перевірка, що змінна не порожня
+                          podNames.split(' ').each { podName ->
+                              if (podName) { // Перевірка, що окремий елемент не порожній
+                                  echo "--- Logs for pod: ${podName} ---"
+                                  sh "kubectl logs ${podName} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify || true"
+                                  sh "kubectl describe pod ${podName} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify || true"
+                              }
+                          }
+                      } else {
+                          echo "No pods found with label app=${IMAGE_NAME} for logging."
+                      }
         }}
 
     post {
