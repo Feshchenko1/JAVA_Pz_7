@@ -31,8 +31,20 @@ RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 RUN install -o root -g root -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
 
-# Тут НЕ МАЄ бути секції з ARG DOCKER_GID та groupadd/usermod,
-# оскільки ми не монтуємо docker.sock.
-# Якщо вона є, вона не завадить, але і не допоможе, тому що доступ буде через DOCKER_HOST.
+# **************************************************************************
+# Add these lines to handle Docker socket permissions
+# Use the GID you found (0)
+ARG DOCKER_GID=0
+# Ensure 'docker' group exists with GID 0, or create it if it doesn't.
+# If GID 0 is already used by 'root', then we just add jenkins to root.
+# If 'docker' group doesn't exist, it creates it with GID 0.
+RUN groupadd -g ${DOCKER_GID} docker 2>/dev/null || usermod -aG root jenkins
+RUN usermod -aG docker jenkins || true
+# The above lines are a bit tricky because GID 0 is usually 'root'.
+# A safer approach might be to just add jenkins to the 'root' group,
+# as the socket is owned by root group (GID 0).
+# Let's simplify this and just add jenkins to root.
+RUN usermod -aG root jenkins
+# **************************************************************************
 
 USER jenkins
