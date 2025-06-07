@@ -6,14 +6,14 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: springboot-app
+      app: pz41-app
   template:
     metadata:
       labels:
-        app: springboot-app
+        app: pz41-app
     spec:
       containers:
-        - name: springboot-app
+        - name: pz41-app
           image: pz41-app:latest
           imagePullPolicy: IfNotPresent
           ports:
@@ -33,4 +33,3 @@ spec:
               value: "org.hibernate.dialect.H2Dialect"
             - name: JWT_SECRET
               value: "KgcPh88SUiCubeT5YeiyK7mIIlPCywg/+Ths1DMEHkucfyH6mFr8gwEiH/PnPmx8rdDymZkpXlEjisY+h8yLkA=="
-
