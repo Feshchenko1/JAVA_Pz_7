@@ -54,52 +54,46 @@ stage('Build Docker Image') {
         script {
             echo "⚙️ Configuring Docker and Minikube environment..."
 
-            // Get Minikube's IP address
             def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
             echo "💡 Minikube IP detected: ${minikubeIp}"
 
-            // Source Minikube Docker environment variables, but specifically adjust DOCKER_HOST
-            // We want to use the actual Minikube IP, not 127.0.0.1 which is misleading in a containerized Jenkins.
             echo "🔄 Sourcing Minikube Docker environment to build image directly into Minikube..."
-
-            // Get the raw docker-env output (often has 127.0.0.1)
             def minikubeDockerEnvOutput = sh(script: 'minikube -p minikube docker-env --shell bash', returnStdout: true).trim()
 
-            // Apply environment variables from minikube docker-env
+            // Initialize a map for environment variables
+            def dockerEnvVars = [:]
             minikubeDockerEnvOutput.split('\n').each { line ->
                 if (line.startsWith('export ')) {
                     def parts = line.substring('export '.length()).split('=', 2)
                     if (parts.length == 2) {
                         def key = parts[0].trim()
                         def value = parts[1].trim().replaceAll('"', '')
-                        // Exclude proxy variables as they are set globally
                         if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
-                            env."${key}" = value
-                            echo "   - Setting env: ${key}=${value}" // For debugging
+                            dockerEnvVars."${key}" = value
+                            echo "    - Staging env: ${key}=${value}" // For debugging
                         }
                     }
                 }
             }
-            echo "Testing connectivity to Minikube Docker daemon..."
-            // Try pinging the IP
-            sh "ping -c 3 ${minikubeIp} || true" // -c 3 for 3 packets, || true to not fail the pipeline
 
-            echo "Attempting docker info with overridden DOCKER_HOST..."
-            sh "docker info"
-            def minikubeDockerPort = (env.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376" // Default to 2376 if not found
-            env.DOCKER_HOST = "tcp://${minikubeIp}:${minikubeDockerPort}"
-            echo "   - Overriding DOCKER_HOST to: ${env.DOCKER_HOST}"
+            // OVERRIDE DOCKER_HOST to use the actual Minikube IP
+            def minikubeDockerPort = (dockerEnvVars.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376" // Get port from the sourced env
+            dockerEnvVars.DOCKER_HOST = "tcp://${minikubeIp}:${minikubeDockerPort}"
+            echo "    - Overriding DOCKER_HOST to: ${dockerEnvVars.DOCKER_HOST}"
             echo "✅ Minikube Docker environment variables sourced and adjusted."
 
-            // Build Docker image directly into Minikube's Docker daemon.
-            echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
+            // Use withEnv to apply these variables to the following commands
+            withEnv(dockerEnvVars.collect { k, v -> "${k}=${v}" }) {
+                echo "Attempting docker info with correctly overridden DOCKER_HOST..."
+                sh "docker info"
 
-            sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
+                echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
+                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
+            }
         }
     }
 }
-
 stage('Deploy to Minikube') {
             steps {
                 script {
