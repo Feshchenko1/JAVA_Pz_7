@@ -131,7 +131,7 @@ stage('Deploy to Minikube') {
                 echo "✅ Application deployed successfully to Minikube."
                                 echo "🔗 Service URL:"
                                 sh "minikube service ${K8S_SERVICE_NAME} --url"
-                  catch (e) {
+                  }catch (e) {
                                             echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
 
                                             echo "--- DIAGNOSTIC INFORMATION ---"
