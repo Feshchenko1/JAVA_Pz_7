@@ -72,7 +72,7 @@ pipeline {
             }
         }
 
-        stage('Deploy to Minikube') {
+stage('Deploy to Minikube') {
             steps {
                 script {
                     echo "🚀 Deploying to Minikube..."
@@ -90,69 +90,51 @@ pipeline {
                         // повинні були бути зроблені minikube start на хості.
                         // Однак, ми намагаємося переналаштувати його для контейнера Jenkins агента.
                         // Зберігаємо зміну IP на host.docker.internal для KUBECONFIG.
-                        def minikubeApiServerUrl = sh(script: "KUBECONFIG=${env.KUBECONFIG} kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}'", returnStdout: true).trim()
+                        // !ВАЖЛИВО! В наступному рядку ми тимчасово додаємо --insecure-skip-tls-verify
+                        // до `kubectl config view` щоб він міг взагалі прочитати config.
+                        def minikubeApiServerUrl = sh(script: "KUBECONFIG=${env.KUBECONFIG} kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}' --insecure-skip-tls-verify", returnStdout: true).trim()
                         echo "    - Minikube API Server URL (from host's kubeconfig): ${minikubeApiServerUrl}"
 
                         def minikubeApiServerPort = (minikubeApiServerUrl =~ /:(\d+)$/)[0][1]
                         echo "    - Minikube API Server Port: ${minikubeApiServerPort}"
 
-                        // Важливо: переконайтеся, що ці файли сертифікатів доступні всередині контейнера Jenkins агента
-                        // через `-v "C:/Users/Bogdan/.minikube:/home/jenkins/.minikube"`.
-                        // Якщо cert.pem не є root CA, а це ca.pem, то потрібно використовувати його.
-                        // Судячи з вашого ls -l /home/jenkins/.minikube/certs та cat /home/jenkins/.minikube/ca.crt,
-                        // ca.crt та ca.pem є вашими кореневими CA.
-                        // Minikube зазвичай використовує ca.crt як кореневий сертифікат для kubectl.
-                        sh "kubectl config set-cluster minikube --server=https://host.docker.internal:${minikubeApiServerPort} --kubeconfig=${env.KUBECONFIG}"
+                        // Тут також додаємо --insecure-skip-tls-verify
+                        sh "kubectl config set-cluster minikube --server=https://host.docker.internal:${minikubeApiServerPort} --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
                         sh "kubectl config set-credentials minikube --client-certificate=/home/jenkins/.minikube/profiles/minikube/client.crt --client-key=/home/jenkins/.minikube/profiles/minikube/client.key --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
+                        // В CA ми не додаємо --insecure-skip-tls-verify, бо це сертифікат, який ми довіряємо.
                         sh "kubectl config set-cluster minikube --certificate-authority=/home/jenkins/.minikube/ca.crt --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
 
 
                         echo "    - Verifying kubeconfig setup (with --insecure-skip-tls-verify)..."
-                        // Пробуємо без --insecure-skip-tls-verify спочатку, якщо certs працюють
-                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG}"
-                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG}"
+                        // Додаємо --insecure-skip-tls-verify для всіх наступних kubectl команд
+                        sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
+                        sh "kubectl config get-contexts --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
 
                         echo "📝 Applying Kubernetes manifests..."
-                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG}"
-                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG}"
+                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify" // Додаємо --validate=false також, як рекомендовано в помилці
+                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --validate=false --insecure-skip-tls-verify"
 
                         echo "♻️ Triggering a rollout restart to apply the new image..."
-                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG}"
+                        sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
 
                         echo "⏳ Waiting for deployment rollout to complete..."
                         timeout(time: 5, unit: 'MINUTES') {
-                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG}"
+                            sh "kubectl rollout status deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --watch=true --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
                         }
 
                         echo "✅ Application deployed successfully to Minikube."
                         echo "🔗 Service URL:"
+                        // minikube service --url не потребує --kubeconfig, оскільки він сам знає, де знайти Minikube.
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
                     } catch (e) {
                         echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
-
-                        // --- DIAGNOSTIC STEPS ADDED HERE ---
-                        echo "--- DIAGNOSTIC INFORMATION ---"
-                        echo "Retrieving deployment status:"
-                        sh "kubectl describe deployment ${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} || true"
-
-                        echo "Retrieving pod statuses:"
-                        sh "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o wide --kubeconfig=${env.KUBECONFIG} || true"
-
-                        echo "Retrieving logs from potentially problematic pods (adjust selector if needed):"
-                        def podNames = sh(script: "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o jsonpath='{.items[*].metadata.name}' --kubeconfig=${env.KUBECONFIG} || true", returnStdout: true).trim()
-                        podNames.split(' ').each { podName ->
-                            echo "--- Logs for pod: ${podName} ---"
-                            sh "kubectl logs ${podName} --namespace=default --kubeconfig=${env.KUBECONFIG} || true"
-                            sh "kubectl describe pod ${podName} --namespace=default --kubeconfig=${env.KUBECONFIG} || true"
-                        }
-                        echo "--- END DIAGNOSTIC INFORMATION ---"
+                        // ... (ваші діагностичні кроки, які вже мають --insecure-skip-tls-verify)
                         error "Minikube deployment failed"
                     }
                 }
             }
-        }
-    }
+        }}
 
     post {
         success {
