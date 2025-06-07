@@ -93,14 +93,19 @@ stage('Build Docker Image') {
             }
         }
 
-        stage('Deploy to Minikube') {
+stage('Deploy to Minikube') {
             steps {
                 script {
                     echo "🚀 Deploying to Minikube..."
                     try {
-                        // Ensure DOCKER_HOST is correctly set for kubectl if it relies on it
-                        // For kubectl, minikube docker-env sets up necessary things, but kubectl doesn't typically need DOCKER_HOST
-                        // minikube commands directly use the minikube context or internal mechanisms.
+                        // Explicitly set KUBECONFIG to ensure kubectl finds the Minikube configuration
+                        // The .kube directory was mounted from the host to /home/jenkins/.kube
+                        env.KUBECONFIG = "/home/jenkins/.kube/config"
+                        echo "   - Setting KUBECONFIG=${env.KUBECONFIG}"
+
+                        // You can optionally check the kubectl context to confirm it's pointing to minikube
+                        sh 'kubectl config current-context'
+                        sh 'kubectl config get-contexts'
 
                         echo "📝 Applying Kubernetes manifests..."
                         sh 'kubectl apply -f k8s/deployment.yaml'
@@ -126,7 +131,6 @@ stage('Build Docker Image') {
                 }
             }
         }
-    }
 
     post {
         success {
