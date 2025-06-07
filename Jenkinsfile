@@ -149,7 +149,7 @@ stage('Deploy to Minikube') {
                       } else {
                           echo "No pods found with label app=${IMAGE_NAME} for logging."
                       }
-        }}
+        }}}
 
     post {
         success {
