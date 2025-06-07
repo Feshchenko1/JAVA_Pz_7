@@ -80,9 +80,12 @@ stage('Build Docker Image') {
                     }
                 }
             }
+            echo "Testing connectivity to Minikube Docker daemon..."
+            // Try pinging the IP
+            sh "ping -c 3 ${minikubeIp} || true" // -c 3 for 3 packets, || true to not fail the pipeline
 
-            // OVERRIDE DOCKER_HOST to use the actual Minikube IP
-            // This is the crucial part. The port comes from the original docker-env output.
+            echo "Attempting docker info with overridden DOCKER_HOST..."
+            sh "docker info"
             def minikubeDockerPort = (env.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376" // Default to 2376 if not found
             env.DOCKER_HOST = "tcp://${minikubeIp}:${minikubeDockerPort}"
             echo "   - Overriding DOCKER_HOST to: ${env.DOCKER_HOST}"
@@ -90,8 +93,7 @@ stage('Build Docker Image') {
 
             // Build Docker image directly into Minikube's Docker daemon.
             echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
-            // Ensure Docker build command itself passes through the Jenkins environment variables,
-            // which now correctly contain the Minikube DOCKER_HOST.
+
             sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
         }
