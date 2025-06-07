@@ -127,7 +127,7 @@ stage('Deploy to Minikube') {
                         // minikube service --url не потребує --kubeconfig, оскільки він сам знає, де знайти Minikube.
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
-                    } } catch (e) {
+                    }  catch (e) {
                                               echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
 
                                               echo "--- DIAGNOSTIC INFORMATION ---"
