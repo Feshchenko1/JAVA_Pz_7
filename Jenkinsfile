@@ -102,20 +102,17 @@ stage('Deploy to Minikube') {
                         def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
                         echo "   - Minikube IP: ${minikubeIp}"
 
-                        // Explicitly set KUBECONFIG
+                        // Explicitly set KUBECONFIG to the mounted path
                         env.KUBECONFIG = "/home/jenkins/.kube/config"
                         echo "   - Setting KUBECONFIG=${env.KUBECONFIG}"
 
-                        // Modify the kubeconfig on the fly to use the Minikube IP instead of 127.0.0.1
-                        // This is a common workaround when `minikube start` places 127.0.0.1 in kubeconfig
-                        // but external access is needed.
-                        sh "kubectl config set-cluster minikube --server=https://${minikubeIp}:65460 --kubeconfig=${env.KUBECONFIG}"
-                        // Note: The port 65460 should be consistent with what minikube reports or defaults to.
-                        // You can verify the port from `minikube ssh` and then `sudo ss -tulpn | grep 6443` or similar.
-                        // minikube's API server often listens on 8443 or 6443, so 65460 might be a different service, or a dynamically assigned one.
-                        // Let's assume 65460 is correct for now, but be aware.
-                        // A safer bet is to use the port from `minikube kubectl-env`'s DOCKER_HOST if that contains the API server.
-                        // Let's assume the current port 65460 as per your kubeconfig.
+                        // --- IMPORTANT: Dynamically fix paths and server in kubeconfig for Jenkins container ---
+                        // Ensure the server address is the Minikube IP and correct port
+                        sh "kubectl config set-cluster minikube --server=https://${minikubeIp}:8443 --kubeconfig=${env.KUBECONFIG}"
+                        // Ensure certificate paths are correct for the mounted volumes in Jenkins container
+                        sh "kubectl config set-credentials minikube --client-certificate=/home/jenkins/.minikube/profiles/minikube/client.crt --client-key=/home/jenkins/.minikube/profiles/minikube/client.key --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
+                        sh "kubectl config set-cluster minikube --certificate-authority=/home/jenkins/.minikube/ca.crt --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
+                        // -------------------------------------------------------------------------------------
 
                         // Now, run kubectl config commands to verify
                         sh 'kubectl config current-context'
