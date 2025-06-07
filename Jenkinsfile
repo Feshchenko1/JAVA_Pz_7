@@ -52,46 +52,40 @@ pipeline {
 stage('Build Docker Image') {
     steps {
         script {
-            echo "⚙️ Ensuring Docker environment points to host's Docker daemon for Minikube image build..."
+            echo "⚙️ Configuring Docker and Minikube environment..."
 
-
+            // We don't need minikubeIp directly for DOCKER_HOST anymore,
+            // but it might be useful for other kubectl commands later
             def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
             echo "💡 Minikube IP detected: ${minikubeIp}"
 
-            // Get the environment variables from minikube docker-env on the host (Minikube's context)
+            echo "🔄 Sourcing Minikube Docker environment to build image directly into Minikube..."
             def minikubeDockerEnvOutput = sh(script: 'minikube -p minikube docker-env --shell bash', returnStdout: true).trim()
-            def dockerEnvVarsForAgent = [:]
+
+            def dockerEnvVars = [:]
             minikubeDockerEnvOutput.split('\n').each { line ->
                 if (line.startsWith('export ')) {
                     def parts = line.substring('export '.length()).split('=', 2)
                     if (parts.length == 2) {
                         def key = parts[0].trim()
                         def value = parts[1].trim().replaceAll('"', '')
-                        // We explicitly *don't* override DOCKER_HOST here to point to minikubeIp directly,
-
-                        if (key in ['DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) {
-                            dockerEnvVarsForAgent."${key}" = value
-                            echo "    - Staging env for agent: ${key}=${value}" // For debugging
+                        if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
+                            dockerEnvVars."${key}" = value
+                            echo "    - Staging env: ${key}=${value}"
                         }
                     }
                 }
             }
 
+            // Get the port from the sourced environment variables
+            def minikubeDockerPort = (dockerEnvVars.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376"
 
+            dockerEnvVars.DOCKER_HOST = "tcp://host.docker.internal:${minikubeDockerPort}"
+            echo "    - Overriding DOCKER_HOST to: ${dockerEnvVars.DOCKER_HOST}"
+            echo "✅ Minikube Docker environment variables sourced and adjusted."
 
-            echo "Assuming host's Docker context is set to Minikube. Jenkins agent will use host's Docker daemon."
-
-
-            dockerEnvVarsForAgent.DOCKER_TLS_VERIFY = "1"
-            dockerEnvVarsForAgent.DOCKER_CERT_PATH = "/home/jenkins/.minikube/certs"
-
-
-            dockerEnvVarsForAgent.DOCKER_HOST = "unix:///var/run/docker.sock"
-            echo "    - Explicitly setting DOCKER_HOST for agent to: ${dockerEnvVarsForAgent.DOCKER_HOST}"
-
-
-            withEnv(dockerEnvVarsForAgent.collect { k, v -> "${k}=${v}" }) {
-                echo "Attempting docker info with correctly configured DOCKER_HOST and certificates..."
+            withEnv(dockerEnvVars.collect { k, v -> "${k}=${v}" }) {
+                echo "Attempting docker info with correctly overridden DOCKER_HOST..."
                 sh "docker info"
 
                 echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
