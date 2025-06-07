@@ -130,7 +130,7 @@ stage('Deploy to Minikube') {
                     }
                 }
             }
-        }
+        }}
 
     post {
         success {
