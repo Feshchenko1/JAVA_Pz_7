@@ -49,50 +49,49 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-                    steps {
-                        script {
-                            echo "⚙️ Configuring Docker and Minikube environment..."
+stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "⚙️ Configuring Docker and Minikube environment..."
 
-                            // Proxy variables need to be exported for docker build
-                            // We will explicitly set them for the docker build command
-                            def http_proxy_env = "HTTP_PROXY=\"${HTTP_PROXY}\""
-                            def https_proxy_env = "HTTPS_PROXY=\"${HTTPS_PROXY}\""
-                            def no_proxy_env = "NO_PROXY=\"${NO_PROXY}\""
+                    // Step 1: Build Docker image on the host's Docker daemon.
+                    // This requires explicitly unsetting DOCKER_HOST and providing proxy settings.
+                    echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} on host Docker..."
+                    sh """
+                        unset DOCKER_HOST # Ensure we use the local /var/run/docker.sock for this build
+                        HTTP_PROXY="${HTTP_PROXY}" HTTPS_PROXY="${HTTPS_PROXY}" NO_PROXY="${NO_PROXY}" docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    """
+                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
 
-                            // Build Docker image using the host's Docker daemon (via the mounted socket)
-                            // Ensure DOCKER_HOST is explicitly unset for this specific command.
-                            echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} on host Docker..."
-                            sh """
-                                unset DOCKER_HOST # Ensure we use the local /var/run/docker.sock
-                                ${http_proxy_env} ${https_proxy_env} ${no_proxy_env} docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            """
-                            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully."
+                    // Step 2: Now, source Minikube's environment to set up kubectl to talk to the Minikube cluster.
+                    // This will include KUBECONFIG and any other necessary Minikube-specific variables.
+                    echo "🔄 Sourcing Minikube environment for kubectl..."
+                    def minikubeEnvCommand = "minikube -p minikube docker-env --shell bash" // Use bash shell to get export commands
+                    def minikubeEnvOutput = sh(script: minikubeEnvCommand, returnStdout: true).trim()
 
-                            // Now, configure the environment to interact with Minikube's Docker daemon
-                            // This is needed for subsequent stages if they directly use Docker within Minikube,
-                            // e.g., if you were pushing images directly into Minikube's daemon.
-                            // For now, we'll keep the Minikube env setup, but the build is separate.
-                            def minikubeEnv = sh(script: 'minikube -p minikube docker-env', returnStdout: true).trim()
-                            minikubeEnv.split('\n').each { line ->
-                                if (line.startsWith('export ')) {
-                                    def parts = line.substring('export '.length()).split('=', 2)
-                                    if (parts.length == 2) {
-                                        def key = parts[0].trim()
-                                        def value = parts[1].trim().replaceAll('"', '')
-                                        // We specifically want DOCKER_HOST from minikube here if needed for later docker commands
-                                        // However, for kubectl and minikube service, it's not typically required as they use kubeconfig/internal mechanisms.
-                                        // For simplicity and to avoid interference, we'll only set environment variables that are NOT DOCKER_HOST or proxy.
-                                        if (!(key in ['DOCKER_HOST', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
-                                            env."${key}" = value
-                                        }
-                                    }
+                    // Parse the output and set environment variables in Jenkins
+                    minikubeEnvOutput.split('\n').each { line ->
+                        if (line.startsWith('export ')) {
+                            def parts = line.substring('export '.length()).split('=', 2)
+                            if (parts.length == 2) {
+                                def key = parts[0].trim()
+                                def value = parts[1].trim().replaceAll('"', '')
+                                // Set ALL environment variables from minikube docker-env
+                                // except the proxy ones which we manage globally in Jenkins environment block.
+                                // We also explicitly want to NOT set DOCKER_HOST here if we are ALWAYS using the host's Docker daemon
+                                // for general docker commands. If you *do* want to use minikube's docker daemon later,
+                                // then remove 'DOCKER_HOST' from this exclusion list.
+                                if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
+                                    env."${key}" = value
+                                    echo "   - Setting env: ${key}=${value}" // For debugging
                                 }
                             }
-                            echo "✅ Minikube environment variables sourced for kubectl/minikube."
                         }
                     }
+                    echo "✅ Minikube environment variables sourced for kubectl/minikube."
                 }
+            }
+        }
 
         stage('Deploy to Minikube') {
             steps {
