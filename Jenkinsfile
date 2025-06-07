@@ -61,21 +61,25 @@ pipeline {
         // }
 
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon using minikube image build..."
-                    // Крапка в кінці '.' означає, що контекст для збірки Dockerfile знаходиться в поточному каталозі.
-                    sh "minikube -p minikube image build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                    echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
-                }
-            }
+stage('Build Docker Image') {
+    steps {
+        script {
+            echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon using minikube image build..."
+            // Set Docker environment to Minikube's
+            sh 'eval $(minikube -p minikube docker-env)' // This sets DOCKER_HOST, DOCKER_TLS_VERIFY, etc.
+            sh 'docker images' // Verify images in Minikube's Docker daemon
+            sh "minikube -p minikube image build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
         }
+    }
+}
 
 stage('Deploy to Minikube') {
             steps {
                 script {
                     echo "🚀 Deploying to Minikube..."
+
+                    sh 'eval $(minikube -p minikube docker-env)'
                     try {
                         def minikubeInternalIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
                         echo "    - Minikube Internal IP: ${minikubeInternalIp}"
