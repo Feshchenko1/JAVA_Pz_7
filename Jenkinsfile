@@ -49,52 +49,31 @@ pipeline {
             }
         }
 
+        stage('Install Minikube Tools') {
+            steps {
+                script {
+                    echo "Installing minikube and kubectl inside the agent..."
+                    sh 'curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && sudo install minikube-linux-amd64 /usr/local/bin/minikube'
+                    sh 'curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl'
+                }
+            }
+        }
+
+
 stage('Build Docker Image') {
     steps {
         script {
-            echo "⚙️ Configuring Docker and Minikube environment..."
-
-            // We don't need minikubeIp directly for DOCKER_HOST anymore,
-            // but it might be useful for other kubectl commands later
-            def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
-            echo "💡 Minikube IP detected: ${minikubeIp}"
-
-            echo "🔄 Sourcing Minikube Docker environment to build image directly into Minikube..."
-            def minikubeDockerEnvOutput = sh(script: 'minikube -p minikube docker-env --shell bash', returnStdout: true).trim()
-
-            def dockerEnvVars = [:]
-            minikubeDockerEnvOutput.split('\n').each { line ->
-                if (line.startsWith('export ')) {
-                    def parts = line.substring('export '.length()).split('=', 2)
-                    if (parts.length == 2) {
-                        def key = parts[0].trim()
-                        def value = parts[1].trim().replaceAll('"', '')
-                        if (!(key in ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY'])) {
-                            dockerEnvVars."${key}" = value
-                            echo "    - Staging env: ${key}=${value}"
-                        }
-                    }
-                }
-            }
-
-            // Get the port from the sourced environment variables
-            def minikubeDockerPort = (dockerEnvVars.DOCKER_HOST =~ /:(\d+)$/)[0][1] ?: "2376"
-
-            dockerEnvVars.DOCKER_HOST = "tcp://host.docker.internal:${minikubeDockerPort}"
-            echo "    - Overriding DOCKER_HOST to: ${dockerEnvVars.DOCKER_HOST}"
-            echo "✅ Minikube Docker environment variables sourced and adjusted."
-
-            withEnv(dockerEnvVars.collect { k, v -> "${k}=${v}" }) {
-                echo "Attempting docker info with correctly overridden DOCKER_HOST..."
-                sh "docker info"
-
-                echo "🐳 Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon..."
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
-            }
+            echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG} directly into Minikube's Docker daemon using minikube image build..."
+            // Використовуємо minikube image build.
+            // Крапка в кінці '.' означає, що контекст для збірки Dockerfile знаходиться в поточному каталозі.
+            // Якщо ваш Dockerfile знаходиться в підкаталозі, наприклад, 'docker/',
+            // вам потрібно вказати 'docker/'.
+            sh "minikube -p minikube image build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            echo "✅ Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully in Minikube."
         }
     }
 }
+
 stage('Deploy to Minikube') {
             steps {
                 script {
