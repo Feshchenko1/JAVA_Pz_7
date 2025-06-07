@@ -98,17 +98,26 @@ stage('Deploy to Minikube') {
                 script {
                     echo "🚀 Deploying to Minikube..."
                     try {
-                        // Get Minikube IP address
-                        def minikubeIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
-                        echo "   - Minikube IP: ${minikubeIp}"
+                        // Get Minikube IP address (this is the VM's internal IP, not directly used for host access)
+                        def minikubeInternalIp = sh(script: 'minikube -p minikube ip', returnStdout: true).trim()
+                        echo "   - Minikube Internal IP: ${minikubeInternalIp}"
+
+                        // Get the API server address that Minikube set in the host's kubeconfig
+                        // This will be 127.0.0.1:XXXXX, where XXXXX is the dynamically assigned port
+                        def minikubeApiServerUrl = sh(script: "kubectl config view --minify --output jsonpath='{.clusters[?(@.name==\"minikube\")].cluster.server}'", returnStdout: true).trim()
+                        echo "   - Minikube API Server URL (from host's kubeconfig): ${minikubeApiServerUrl}"
+
+                        // Extract the port from the URL (e.g., https://127.0.0.1:51522 -> 51522)
+                        def minikubeApiServerPort = (minikubeApiServerUrl =~ /:(\d+)$/)[0][1]
+                        echo "   - Minikube API Server Port: ${minikubeApiServerPort}"
 
                         // Explicitly set KUBECONFIG to the mounted path
                         env.KUBECONFIG = "/home/jenkins/.kube/config"
                         echo "   - Setting KUBECONFIG=${env.KUBECONFIG}"
 
                         // --- IMPORTANT: Dynamically fix paths and server in kubeconfig for Jenkins container ---
-                        // Ensure the server address is the Minikube IP and correct port
-                        sh "kubectl config set-cluster minikube --server=https://${minikubeIp}:8443 --kubeconfig=${env.KUBECONFIG}"
+                        // Use host.docker.internal to access the API server from inside the container
+                        sh "kubectl config set-cluster minikube --server=https://host.docker.internal:${minikubeApiServerPort} --kubeconfig=${env.KUBECONFIG}"
                         // Ensure certificate paths are correct for the mounted volumes in Jenkins container
                         sh "kubectl config set-credentials minikube --client-certificate=/home/jenkins/.minikube/profiles/minikube/client.crt --client-key=/home/jenkins/.minikube/profiles/minikube/client.key --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
                         sh "kubectl config set-cluster minikube --certificate-authority=/home/jenkins/.minikube/ca.crt --embed-certs=true --kubeconfig=${env.KUBECONFIG}"
@@ -133,6 +142,7 @@ stage('Deploy to Minikube') {
                         echo "✅ Application deployed successfully to Minikube."
 
                         echo "🔗 Service URL:"
+                        // This will still use the internal minikube ip for service access, which should be fine after deployment
                         sh "minikube service ${K8S_SERVICE_NAME} --url"
 
                     } catch (e) {
