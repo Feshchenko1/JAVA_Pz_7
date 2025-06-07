@@ -1,46 +1,46 @@
+# Використовуємо офіційний образ Jenkins
 FROM jenkins/jenkins:lts-jdk17
 
+# Встановлюємо Docker CLI, kubectl та Minikube
 USER root
+RUN apt-get update && apt-get install -y \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    netcat-openbsd \
+    git \
+    maven \
+    unzip
 
-ENV DEBIAN_FRONTEND=noninteractive
+# Додаємо офіційний GPG ключ Docker
+RUN mkdir -p /etc/apt/keyrings
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+RUN echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Install common tools and set up Docker's GPG key and Kubernetes GPG key
-RUN apt-get update && \
-    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release --no-install-recommends && \
-    \
-    # Setup Docker repository
-    mkdir -m 0755 -p /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
-    \
-    # Setup Kubernetes repository
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \
-    \
-    apt-get update && \
-    \
-    # Install Docker CLI tools and kubectl
-    apt-get install -y \
-    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
-    kubectl \
-    --no-install-recommends && \
-    \
-    # Install minikube
-    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && \
-    install minikube-linux-amd64 /usr/local/bin/minikube && \
-    rm minikube-linux-amd64 && \
-    \
-    # Add Jenkins user to docker group (THIS IS THE KEY PART, MUST BE DONE AS ROOT)
-    usermod -aG docker jenkins && \
-    \
-    # Clean up apt cache
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Встановлюємо Docker CLI
+RUN apt-get update && apt-get install -y docker-ce-cli
 
-# Verify installations (optional, but good for debugging)
-RUN docker --version && \
-    kubectl version --client && \
-    minikube version
+# Встановлюємо kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
-# Switch back to Jenkins user for normal operations
+# Встановлюємо Minikube
+RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+RUN install -o root -g root -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
+
+# *************************************************************************
+# ВИПРАВЛЕНИЙ БЛОК ДЛЯ ДОДАВАННЯ КОРИСТУВАЧА JENKINS ДО ГРУПИ DOCKER З GID ХОСТА
+# Замініть 999 на GID, який ви отримали з 'grep docker /etc/group' на хості (WSL2 VM)
+#
+# Створимо групу 'docker' з GID 999, якщо її ще немає, або якщо вона є з іншим GID.
+# Потім додамо jenkins до цієї групи.
+# Це має бути ЄДИНИЙ блок, який стосується груп/дозволів Docker socket.
+# *************************************************************************
+ARG DOCKER_GID=999
+RUN groupadd -g ${DOCKER_GID} docker || true && usermod -aG docker jenkins
+
 USER jenkins
