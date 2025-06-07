@@ -1,13 +1,10 @@
 package com.dailycodework.pz_4_1.controller;
 
-import com.dailycodework.pz_4_1.model.Role;
 import com.dailycodework.pz_4_1.model.User;
 import com.dailycodework.pz_4_1.payload.request.SignupRequest;
-import com.dailycodework.pz_4_1.repository.RoleRepository;
+import com.dailycodework.pz_4_1.payload.response.MessageResponse;
 import com.dailycodework.pz_4_1.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,11 +12,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -31,16 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
-@Transactional
-@ActiveProfiles("test")
-//@Sql(value = "/scripts/insert-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Transactional // Ensures test data is rolled back
+@ActiveProfiles("test") // Uses application-test.properties
 public class AuthControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private RoleRepository roleRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -51,77 +43,108 @@ public class AuthControllerIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    @BeforeEach
-    void setUp() {
-        userRepository.deleteAll();
-        roleRepository.deleteAll();
+    @Test
+    void registerUser_shouldCreateNewUserAndReturnSuccessMessage() throws Exception {
+        // Arrange
+        String username = "newTestUser";
+        String email = "newtestuser@example.com";
+        String password = "securePassword123";
+        Set<String> roles = new HashSet<>();
+        roles.add("user"); // Assign ROLE_USER by default
 
-        roleRepository.save(new Role("ROLE_USER"));
-        roleRepository.save(new Role("ROLE_ADMIN"));
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername(username);
+        signupRequest.setEmail(email);
+        signupRequest.setPassword(password);
+        signupRequest.setRoles(roles);
 
-        User adminUser = new User();
-        adminUser.setUsername("admin");
-        adminUser.setPassword(passwordEncoder.encode("123123"));
-        adminUser.setEmail("admin@test.com");
-        adminUser.setEnabled(true);
-        Role adminRole = roleRepository.findByName("ROLE_ADMIN").orElseThrow();
-        Set<Role> roles = new HashSet<>();
-        roles.add(adminRole);
-        adminUser.setRoles(roles);
-        userRepository.save(adminUser);
+        // Act
+        MvcResult result = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(signupRequest)))
+                .andExpect(status().isCreated()) // Expect HTTP 201 Created
+                .andExpect(jsonPath("$.message").value("User registered successfully!"))
+                .andReturn();
+
+        // Assert
+        Optional<User> createdUser = userRepository.findByUsername(username);
+        assertThat(createdUser).isPresent();
+        assertThat(createdUser.get().getUsername()).isEqualTo(username);
+        assertThat(createdUser.get().getEmail()).isEqualTo(email);
+        // Verify password is encrypted
+        assertThat(passwordEncoder.matches(password, createdUser.get().getPassword())).isTrue();
+        // Verify roles are assigned
+        assertThat(createdUser.get().getRoles()).anyMatch(role -> role.getName().equals("ROLE_USER"));
     }
 
     @Test
-    @DisplayName("registerUser повернути статус створеного та зберегти користувача, коли запит на реєстрацію дійсний")
-    void registerUser_shouldReturnCreatedStatus() throws Exception {
+    void registerUser_shouldReturnBadRequest_whenUsernameAlreadyExists() throws Exception {
+        // Arrange: Use an existing username from V3 migration
+        String username = "admin"; // This user already exists from V3 migration
+        String email = "anotheremail@example.com";
+        String password = "somePassword";
+
         SignupRequest signupRequest = new SignupRequest();
-        signupRequest.setUsername("newuser_test");
-        signupRequest.setEmail("newuser_test@example.com");
-        signupRequest.setPassword("securepassword");
-        signupRequest.setRoles(Collections.singleton("user"));
+        signupRequest.setUsername(username);
+        signupRequest.setEmail(email);
+        signupRequest.setPassword(password);
+        signupRequest.setRoles(new HashSet<>());
+
+        // Act & Assert
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(signupRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.message").value("User registered successfully!"));
-
-        Optional<User> registeredUser = userRepository.findByUsername("newuser_test");
-        assertThat(registeredUser).isPresent();
-        assertThat(registeredUser.get().getEmail()).isEqualTo("newuser_test@example.com");
-        assertThat(registeredUser.get().getRoles().stream().anyMatch(role -> role.getName().equals("ROLE_USER"))).isTrue();
-    }
-
-    @Test
-    @DisplayName("registerUser повинен повертати неправильний запит, якщо ім'я користувача вже існує")
-    void registerUser_shouldReturnBadRequest() throws Exception {
-        SignupRequest signupRequest = new SignupRequest();
-        signupRequest.setUsername("admin");
-        signupRequest.setEmail("another@example.com");
-        signupRequest.setPassword("password123");
-
-        mockMvc.perform(post("/api/auth/signup")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(signupRequest)))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isBadRequest()) // Expect HTTP 400 Bad Request
                 .andExpect(jsonPath("$.message").value("Error: Username is already taken!"));
 
-        assertThat(userRepository.findByEmail("another@example.com")).isNotPresent();
+        // Verify that no new user was created with this username
+        long userCount = userRepository.count(); // Assuming initial count before this test
+        // This check is a bit tricky with @Transactional, but it implies the user wasn't persisted
+        // A more robust check would be to explicitly find the user by a unique identifier
+        // that wouldn't conflict, if possible.
+        assertThat(userRepository.findByEmail(email)).isNotPresent();
     }
 
     @Test
-    @DisplayName("registerUser повинен повертати неправильний запит, якщо електронна пошта вже існує")
-    void registerUser_shouldReturnBadRequest_Email() throws Exception {
-        SignupRequest signupRequest = new SignupRequest();
-        signupRequest.setUsername("new_unique_user");
-        signupRequest.setEmail("admin@test.com");
-        signupRequest.setPassword("password123");
+    void registerUser_shouldReturnBadRequest_whenEmailAlreadyExists() throws Exception {
+        // Arrange: Use an existing email from V3 migration
+        String username = "anotherNewUser";
+        String email = "admin@example.com"; // This email already exists
+        String password = "somePassword";
 
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername(username);
+        signupRequest.setEmail(email);
+        signupRequest.setPassword(password);
+        signupRequest.setRoles(new HashSet<>());
+
+        // Act & Assert
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(signupRequest)))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isBadRequest()) // Expect HTTP 400 Bad Request
                 .andExpect(jsonPath("$.message").value("Error: Email is already in use!"));
 
-        assertThat(userRepository.findByUsername("new_unique_user")).isNotPresent();
+        // Verify no new user was created with this email
+        assertThat(userRepository.findByUsername(username)).isNotPresent();
+    }
+
+    @Test
+    void registerUser_shouldReturnBadRequest_whenSignupRequestIsInvalid() throws Exception {
+        // Arrange: Invalid SignupRequest (e.g., username too short)
+        SignupRequest invalidSignupRequest = new SignupRequest();
+        invalidSignupRequest.setUsername("ab"); // Too short (min 3)
+        invalidSignupRequest.setEmail("invalid@example.com");
+        invalidSignupRequest.setPassword("password");
+        invalidSignupRequest.setRoles(new HashSet<>()); // Set to avoid NullPointerException if not provided by default
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalidSignupRequest)))
+                .andExpect(status().isBadRequest())
+                // Змінюємо очікування: тепер ми чекаємо конкретне поле помилки, наприклад "username"
+                .andExpect(jsonPath("$.username").exists())
+                .andExpect(jsonPath("$.username").value("Username must be between 3 and 20 characters"));
     }
 }

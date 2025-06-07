@@ -1,3 +1,5 @@
+
+
 CREATE TABLE roles
 (
     id   BIGINT AUTO_INCREMENT NOT NULL,
@@ -26,7 +28,7 @@ CREATE TABLE users_roles
     CONSTRAINT pk_users_roles PRIMARY KEY (role_id, user_id)
 );
 
--- Add unique constraints
+
 ALTER TABLE roles
     ADD CONSTRAINT uc_roles_name UNIQUE (name);
 
@@ -36,7 +38,6 @@ ALTER TABLE users
 ALTER TABLE users
     ADD CONSTRAINT uc_users_username UNIQUE (username);
 
--- Add foreign keys for the new tables
 ALTER TABLE users_roles
     ADD CONSTRAINT fk_userol_on_role FOREIGN KEY (role_id) REFERENCES roles (id);
 
