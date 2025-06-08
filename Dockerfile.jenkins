@@ -1,6 +1,5 @@
 FROM jenkins/jenkins:lts-jdk17
 
-# Встановлюємо Docker CLI, kubectl та Minikube
 USER root
 RUN apt-get update && apt-get install -y \
     apt-transport-https \
@@ -13,38 +12,25 @@ RUN apt-get update && apt-get install -y \
     maven \
     unzip
 
-# Додаємо офіційний GPG ключ Docker
 RUN mkdir -p /etc/apt/keyrings
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 RUN echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
     $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Встановлюємо Docker CLI
 RUN apt-get update && apt-get install -y docker-ce-cli
 
-# Встановлюємо kubectl
 RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
-# Встановлюємо Minikube
 RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 RUN install -o root -g root -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
 
-# **************************************************************************
-# Add these lines to handle Docker socket permissions
-# Use the GID you found (0)
 ARG DOCKER_GID=0
-# Ensure 'docker' group exists with GID 0, or create it if it doesn't.
-# If GID 0 is already used by 'root', then we just add jenkins to root.
-# If 'docker' group doesn't exist, it creates it with GID 0.
+
 RUN groupadd -g ${DOCKER_GID} docker 2>/dev/null || usermod -aG root jenkins
 RUN usermod -aG docker jenkins || true
-# The above lines are a bit tricky because GID 0 is usually 'root'.
-# A safer approach might be to just add jenkins to the 'root' group,
-# as the socket is owned by root group (GID 0).
-# Let's simplify this and just add jenkins to root.
+
 RUN usermod -aG root jenkins
-# **************************************************************************
 
 USER jenkins
