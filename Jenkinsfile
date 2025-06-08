@@ -61,7 +61,7 @@ pipeline {
             }
         }
 
-              stastage('Deploy to Minikube') {
+              stage('Deploy to Minikube') {
 
                  steps {
 
