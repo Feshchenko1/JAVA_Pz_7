@@ -6,7 +6,9 @@ pipeline {
         IMAGE_TAG = "latest"
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
-        // Видаляємо зайві змінні, щоб уникнути плутанини
+        // ВАЖЛИВО: Повертаємо цю змінну. Вона вказує minikube всередині
+        // контейнера, де шукати свої конфігураційні файли.
+        MINIKUBE_HOME = '/home/jenkins'
     }
 
     stages {
@@ -21,7 +23,6 @@ pipeline {
             steps {
                 echo '🔧 Compiling and packaging the project...'
                 sh 'chmod +x ./mvnw'
-                // Пропускаємо тести тут, бо для них є окремий етап
                 sh './mvnw clean package -DskipTests'
             }
         }
@@ -45,20 +46,25 @@ pipeline {
             }
         }
 
-        // --- ВИПРАВЛЕНІ ЕТАПИ CD ---
+        // --- ФІНАЛЬНА ВЕРСІЯ ЕТАПІВ CD ---
 
         stage('Build Docker Image into Minikube') {
             steps {
                 script {
-                    echo "🎯 Pointing Docker CLI to Minikube's Docker daemon..."
-                    // Ця команда виконує 'docker build' УСЕРЕДИНІ контексту Minikube.
-                    // Це найнадійніший спосіб зробити образ видимим для Kubernetes.
-                    sh '''
-                        eval $(minikube -p minikube docker-env) && \
-                        echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..." && \
-                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                    '''
-                    echo "✅ Docker image is now available inside Minikube."
+                    echo "🎯 Getting Minikube's Docker environment..."
+                    // Використовуємо більш надійний підхід:
+                    // 1. Отримуємо змінні середовища як рядок.
+                    // 2. Використовуємо 'withEnv' для їх застосування до наступних команд.
+                    def dockerEnv = sh(script: "minikube -p minikube docker-env", returnStdout: true).trim()
+
+                    withEnv(["${dockerEnv}"]) {
+                        // Усі команди всередині цього блоку тепер будуть бачити Docker-демон Minikube.
+                        echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+
+                        echo "✅ Docker image is now available inside Minikube. Verifying..."
+                        sh "docker images | grep ${IMAGE_NAME}"
+                    }
                 }
             }
         }
@@ -67,8 +73,7 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Deploying to Minikube..."
-                    // Завдяки змонтованому /home/jenkins/.kube, kubectl автоматично
-                    // знайде правильну конфігурацію. Жодних складних налаштувань не потрібно.
+                    // Конфігурація kubectl вже змонтована і має працювати автоматично.
 
                     echo "📝 Applying Kubernetes manifests..."
                     sh 'kubectl apply -f k8s/deployment.yaml'
