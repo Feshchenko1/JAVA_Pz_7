@@ -1,5 +1,3 @@
-
-
 CREATE TABLE roles
 (
     id   BIGINT AUTO_INCREMENT NOT NULL,
@@ -13,7 +11,7 @@ CREATE TABLE users
     username           VARCHAR(100) NOT NULL,
     password           VARCHAR(255) NOT NULL,
     email              VARCHAR(150) NOT NULL,
-    enabled            BIT(1)       NOT NULL,
+    enabled            BOOLEAN      NOT NULL,
     created_date       datetime     NOT NULL,
     last_modified_date datetime     NOT NULL,
     created_by         VARCHAR(255) NULL,

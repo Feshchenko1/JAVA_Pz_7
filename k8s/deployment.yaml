@@ -26,9 +26,9 @@ spec:
             - name: SPRING_DATASOURCE_PASSWORD
               value: "admin"
             - name: SPRING_FLYWAY_ENABLED
-              value: "false"
+              value: "true"
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-              value: "update"
+              value: "create-drop"
             - name: SPRING_JPA_DATABASE_PLATFORM
               value: "org.hibernate.dialect.H2Dialect"
             - name: JWT_SECRET
