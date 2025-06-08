@@ -85,8 +85,9 @@ pipeline {
 
 
                         echo "📝 Applying Kubernetes manifests..."
-                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
-                        sh "kubectl apply -f k8s/service.yaml --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
+                        sh "kubectl delete deployment pz41-app-deployment --namespace=default --kubeconfig=/home/jenkins/.kube/config --ignore-not-found=true --insecure-skip-tls-verify=true"
+                        sh "kubectl apply -f k8s/deployment.yaml --kubeconfig=/home/jenkins/.kube/config --insecure-skip-tls-verify=true"
+
 
                         echo "♻️ Triggering a rollout restart to apply the new image..."
                         sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --kubeconfig=${env.KUBECONFIG} --insecure-skip-tls-verify"
