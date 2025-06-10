@@ -48,19 +48,25 @@ stage('Build Docker Image into Minikube') {
     steps {
         script {
             echo "🎯 Getting Minikube's Docker environment..."
-            def dockerEnvOutput = sh(script: "minikube -p minikube docker-env", returnStdout: true).trim()
+            // Вкажіть --shell bash, щоб отримати вивід у форматі Bash
+            def dockerEnvOutput = sh(script: "minikube -p minikube docker-env --shell bash", returnStdout: true).trim()
 
             def dockerHost
             def dockerTlsVerify
             def dockerCertPath
             dockerEnvOutput.eachLine { line ->
-                if (line.contains("export DOCKER_HOST=")) {
-                    dockerHost = line.split("=")[1].replace("\"", "")
-                } else if (line.contains("export DOCKER_TLS_VERIFY=")) {
-                    dockerTlsVerify = line.split("=")[1].replace("\"", "")
-                } else if (line.contains("export DOCKER_CERT_PATH=")) {
-                    dockerCertPath = line.split("=")[1].replace("\"", "")
+                if (line.startsWith("export DOCKER_HOST=")) { // Використовуйте startsWith для більшої надійності
+                    dockerHost = line.split("=")[1].replaceAll('"', '') // Видаліть всі подвійні лапки
+                } else if (line.startsWith("export DOCKER_TLS_VERIFY=")) {
+                    dockerTlsVerify = line.split("=")[1].replaceAll('"', '')
+                } else if (line.startsWith("export DOCKER_CERT_PATH=")) {
+                    dockerCertPath = line.split("=")[1].replaceAll('"', '')
                 }
+            }
+
+            // Перевірка, чи змінні не null/порожні
+            if (!dockerHost || !dockerTlsVerify || !dockerCertPath) {
+                error "Failed to parse Minikube Docker environment. DOCKER_HOST: ${dockerHost}, DOCKER_TLS_VERIFY: ${dockerTlsVerify}, DOCKER_CERT_PATH: ${dockerCertPath}"
             }
 
             withEnv([
@@ -69,15 +75,16 @@ stage('Build Docker Image into Minikube') {
                 "DOCKER_CERT_PATH=${dockerCertPath}"
             ]) {
                 echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                // Переконайтеся, що ви знаходитесь у корені вашого репозиторію, де лежить Dockerfile
+                // Зазвичай це ${WORKSPACE}
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
 
                 echo "✅ Docker image is now available inside Minikube. Verifying..."
-                sh "docker images | grep ${IMAGE_NAME} || true" // Додайте || true, щоб не крашити пайплайн, якщо grep нічого не знайде
+                sh "docker images | grep ${IMAGE_NAME} || true"
             }
         }
     }
 }
-
 stage('Deploy to Minikube') {
     steps {
         script {
