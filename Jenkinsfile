@@ -71,25 +71,18 @@ stage('Deploy to Minikube') {
         script {
             echo "🚀 Deploying to Minikube..."
 
-            // Встановлюємо KUBECONFIG явно перед виконанням kubectl
-            env.KUBECONFIG = "${MINIKUBE_HOME}/.kube/config" // Переконайтеся, що MINIKUBE_HOME коректний
+            env.KUBECONFIG = "${MINIKUBE_HOME}/.kube/config"
 
-            // Перевірка KUBECONFIG
             sh "echo KUBECONFIG is set to: ${env.KUBECONFIG}"
-            sh "ls -la ${env.KUBECONFIG} || true" // Перевіряємо, чи існує файл
+            sh "ls -la ${env.KUBECONFIG} || true"
+
+            // ДОДАЙТЕ ЦЕЙ РЯДОК ДЛЯ ДІАГНОСТИКИ:
+            sh "echo 'Server URL from kubeconfig:'"
+            sh "kubectl config view --minify --output jsonpath='{.clusters[0].cluster.server}' || true"
+
 
             try {
-                // Видаліть наступний рядок, він тепер не потрібен або конфліктує:
-                // sh 'eval $(minikube -p minikube docker-env)' // Цей рядок встановлює Docker env, а не K8s env
-
-                echo " - Setting KUBECONFIG=${env.KUBECONFIG}" // Це лише виводить змінну, не встановлює її.
-                                                              // Вона вже встановлена вище.
-
-                // Замість sh "kubectl config use-context minikube"
-                // Спробуйте використати явний шлях до kubeconfig.
-                // Хоча, якщо KUBECONFIG встановлено, то kubectl має його знайти.
-                sh "kubectl config use-context minikube" // Це повинно тепер спрацювати, якщо KUBECONFIG правильний
-
+                sh "kubectl config use-context minikube"
                 sh "kubectl config current-context"
 
                 echo "🗑️ Deleting old Kubernetes resources if they exist..."
