@@ -48,35 +48,21 @@ stage('Build Docker Image into Minikube') {
     steps {
         script {
             echo "🎯 Getting Minikube's Docker environment..."
+            // Використовуйте sh -c "eval" для Jenkins
+            // Це дозволить змінним оточення встановитись у поточному shell
+            def dockerEnvScript = "minikube -p minikube docker-env"
+            // Виконати команду та отримати вивід, потім виконати 'eval' для встановлення змінних оточення
+            sh "eval \"\$(${dockerEnvScript})\""
 
-            // Це має повернути IP-адресу Minikube VM
-            def minikubeIp = sh(script: "minikube ip", returnStdout: true).trim()
 
-            // Перевірте, чи отримано IP
-            if (!minikubeIp || minikubeIp.contains("error")) {
-                error "Failed to get Minikube IP. Output: ${minikubeIp}"
-            }
+            echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
+            // Переконайтеся, що ви знаходитесь у корені вашого репозиторію, де лежить Dockerfile
+            // Поточна робоча директорія в Jenkinsfile - це корінь клонованого репозиторію.
+            // Якщо Dockerfile знаходиться в корені, це правильно.
+            sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
 
-            // Використовуйте цей IP для DOCKER_HOST
-            // Порт для Docker-daemon Minikube - це 2376
-            def dockerHost = "tcp://${minikubeIp}:2376"
-            def dockerTlsVerify = "1"
-            def dockerCertPath = "${MINIKUBE_HOME}/.minikube/certs" // Шлях до сертифікатів всередині контейнера Jenkins
-
-            echo "DEBUG: Setting DOCKER_HOST=${dockerHost}, DOCKER_TLS_VERIFY=${dockerTlsVerify}, DOCKER_CERT_PATH=${dockerCertPath}"
-
-            withEnv([
-                "DOCKER_HOST=${dockerHost}",
-                "DOCKER_TLS_VERIFY=${dockerTlsVerify}",
-                "DOCKER_CERT_PATH=${dockerCertPath}"
-            ]) {
-                echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                // Переконайтеся, що ви знаходитесь у корені вашого репозиторію, де лежить Dockerfile
-                sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-
-                echo "✅ Docker image is now available inside Minikube. Verifying..."
-                sh "docker images | grep ${IMAGE_NAME} || true"
-            }
+            echo "✅ Docker image is now available inside Minikube. Verifying..."
+            sh "docker images | grep ${IMAGE_NAME} || true"
         }
     }
 }
@@ -85,53 +71,34 @@ stage('Deploy to Minikube') {
         script {
             echo "🚀 Deploying to Minikube..."
 
-            // Видаліть це, якщо ви вже видалили 'server' з kubeconfig
-            // env.KUBECONFIG = "${MINIKUBE_HOME}/.kube/config"
+            // Встановлюємо KUBECONFIG явно перед виконанням kubectl
+            env.KUBECONFIG = "${MINIKUBE_HOME}/.kube/config" // Переконайтеся, що MINIKUBE_HOME коректний
 
-            // Замість eval $(minikube -p minikube docker-env)
-            // Використовуйте змінну KUBECONFIG, яка вже має бути налаштована через Secret File.
-            // НЕ РОБІТЬ sh 'eval $(minikube -p minikube docker-env)' ТУТ ЗНОВУ, ЦЕ ДЛЯ DOCKER, А НЕ KUBECTL.
-            // Якщо KUBECONFIG встановлено через withCredentials, то він вже буде доступний.
-
-            // Забезпечте, що KUBECONFIG використовується. Якщо ви не використовуєте withCredentials,
-            // тоді можливо вам потрібно буде явно вказати KUBECONFIG=... для кожного kubectl виклику.
-            // Але оскільки ви вже монтуєте .kube та .minikube, то Jenkins має знайти його.
+            // Перевірка KUBECONFIG
+            sh "echo KUBECONFIG is set to: ${env.KUBECONFIG}"
+            sh "ls -la ${env.KUBECONFIG} || true" // Перевіряємо, чи існує файл
 
             try {
-                // Видаліть або закоментуйте рядок:
+                // Видаліть наступний рядок, він тепер не потрібен або конфліктує:
                 // sh 'eval $(minikube -p minikube docker-env)' // Цей рядок встановлює Docker env, а не K8s env
 
-                echo " - Setting KUBECONFIG=${env.KUBECONFIG}" // Це не встановлює KUBECONFIG, а виводить його значення.
-                                                              // KUBECONFIG вже має бути встановлений через withCredentials
+                echo " - Setting KUBECONFIG=${env.KUBECONFIG}" // Це лише виводить змінну, не встановлює її.
+                                                              // Вона вже встановлена вище.
 
-                // Якщо ви не використовуєте withCredentials (як у моєму попередньому прикладі),
-                // тоді вам доведеться вказати KUBECONFIG для кожного виклику kubectl.
-                // Або, якщо ви монтуєте C:/Users/Bogdan/.kube до /home/jenkins/.kube,
-                // і ваш файл config знаходиться за цим шляхом, то kubectl має його знайти за замовчуванням.
+                // Замість sh "kubectl config use-context minikube"
+                // Спробуйте використати явний шлях до kubeconfig.
+                // Хоча, якщо KUBECONFIG встановлено, то kubectl має його знайти.
+                sh "kubectl config use-context minikube" // Це повинно тепер спрацювати, якщо KUBECONFIG правильний
 
-                // Проте, оскільки ви використовуєте:
-                // -v C:/Users/Bogdan/.kube:/home/jenkins/.kube
-                // -v C:/Users/Bogdan/.minikube:/home/jenkins/.minikube
-                // то файли доступні в Jenkins, і kubectl повинен їх знайти.
-
-                // Перевірте, чи не конфліктує MINIKUBE_HOME = '/home/jenkins' з фактичним шляхом.
-                // Якщо JenkinsAgent виконується як user 'jenkins', то /home/jenkins/.kube коректно.
-
-                sh "kubectl config use-context minikube" // без --kubeconfig, якщо env.KUBECONFIG вже встановлено
-                sh "kubectl config current-context" // без --kubeconfig
+                sh "kubectl config current-context"
 
                 echo "🗑️ Deleting old Kubernetes resources if they exist..."
                 sh "kubectl delete deployment ${K8S_DEPLOYMENT_NAME} --namespace=default --ignore-not-found=true --insecure-skip-tls-verify"
                 sh "kubectl delete service ${K8S_SERVICE_NAME} --namespace=default --ignore-not-found=true --insecure-skip-tls-verify"
 
-
                 echo "📝 Applying Kubernetes manifests..."
-                // Цей рядок дублює попередній delete
-                // sh "kubectl delete deployment pz41-app-deployment --namespace=default --kubeconfig=/home/jenkins/.kube/config --ignore-not-found=true --insecure-skip-tls-verify=true"
-                // Додайте apply service
                 sh "kubectl apply -f k8s/service.yaml --namespace=default --insecure-skip-tls-verify=true"
                 sh "kubectl apply -f k8s/deployment.yaml --namespace=default --insecure-skip-tls-verify=true"
-
 
                 echo "♻️ Triggering a rollout restart to apply the new image..."
                 sh "kubectl rollout restart deployment/${K8S_DEPLOYMENT_NAME} --namespace=default --insecure-skip-tls-verify"
@@ -144,28 +111,28 @@ stage('Deploy to Minikube') {
                 echo "✅ Application deployed successfully to Minikube."
                 echo "🔗 Service URL:"
                 sh "minikube service ${K8S_SERVICE_NAME} --url"
-                    } catch (e) {
-                        echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
-                        echo "--- DIAGNOSTIC INFORMATION ---"
-                        echo "Retrieving deployment status:"
-                        sh "kubectl describe deployment ${K8S_DEPLOYMENT_NAME} --namespace=default  --insecure-skip-tls-verify || true"
-                        echo "Retrieving pod statuses:"
-                        sh "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o wide  --insecure-skip-tls-verify || true"
 
-                        echo "Retrieving logs from potentially problematic pods (adjust selector if needed):"
-                        def podNames = sh(script: "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o jsonpath='{.items[*].metadata.name}'  --insecure-skip-tls-verify || true", returnStdout: true).trim()
-                        podNames.split(' ').each { podName ->
-                            echo "--- Logs for pod: ${podName} ---"
-                            sh "kubectl logs ${podName} --namespace=default  --insecure-skip-tls-verify || true"
-                            sh "kubectl describe pod ${podName} --namespace=default  --insecure-skip-tls-verify || true"
-                        }
-                        echo "--- END DIAGNOSTIC INFORMATION ---"
-                        error "Minikube deployment failed"
-                    }
+            } catch (e) {
+                echo "❌ Failed to deploy to Minikube: ${e.getMessage()}"
+                echo "--- DIAGNOSTIC INFORMATION ---"
+                echo "Retrieving deployment status:"
+                sh "kubectl describe deployment ${K8S_DEPLOYMENT_NAME} --namespace=default --insecure-skip-tls-verify || true"
+                echo "Retrieving pod statuses:"
+                sh "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o wide --insecure-skip-tls-verify || true"
+
+                echo "Retrieving logs from potentially problematic pods (adjust selector if needed):"
+                def podNames = sh(script: "kubectl get pods -l app=${IMAGE_NAME} --namespace=default -o jsonpath='{.items[*].metadata.name}' --insecure-skip-tls-verify || true", returnStdout: true).trim()
+                podNames.split(' ').each { podName ->
+                    echo "--- Logs for pod: ${podName} ---"
+                    sh "kubectl logs ${podName} --namespace=default --insecure-skip-tls-verify || true"
+                    sh "kubectl describe pod ${podName} --namespace=default --insecure-skip-tls-verify || true"
                 }
+                echo "--- END DIAGNOSTIC INFORMATION ---"
+                error "Minikube deployment failed"
             }
         }
     }
+}
 
     post {
         success {
