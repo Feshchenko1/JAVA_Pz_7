@@ -6,7 +6,7 @@ pipeline {
         IMAGE_TAG = "latest"
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
-        MINIKUBE_HOME = '/home/jenkins' // Ensure this path is correct for your Jenkins agent
+        MINIKUBE_HOME = '/home/jenkins'
     }
 
     stages {
@@ -73,9 +73,6 @@ pipeline {
 
                         sh 'eval $(minikube -p minikube docker-env)'
 
-                        // Add --insecure-skip-tls-verify to kubectl commands that connect to the API server
-                        // This resolves the TLS certificate validation error.
-                        // Also, ensure the context is correctly set up for the Jenkins user.
                         sh "kubectl config use-context minikube --kubeconfig=${env.KUBECONFIG}"
                         sh "kubectl config current-context --kubeconfig=${env.KUBECONFIG}"
 
@@ -99,8 +96,6 @@ pipeline {
 
                         echo "✅ Application deployed successfully to Minikube."
                         echo "🔗 Service URL:"
-                        // minikube service doesn't directly take --insecure-skip-tls-verify, but it might resolve internal IPs.
-                        // If it fails, you might need to manually construct the URL.
                         sh "minikube service ${K8S_SERVICE_NAME} --url --kubeconfig=${env.KUBECONFIG}"
 
                     } catch (e) {
