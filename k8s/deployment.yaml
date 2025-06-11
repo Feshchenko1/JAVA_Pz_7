@@ -15,7 +15,7 @@ spec:
       containers:
         - name: pz41-app
           image: pz41-app:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           env:
