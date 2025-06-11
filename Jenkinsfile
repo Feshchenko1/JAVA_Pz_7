@@ -64,8 +64,8 @@ stage('Build Docker Image into Minikube') {
             echo "✅ Docker image is now available inside Minikube. Verifying..."
             sh "docker images | grep ${IMAGE_NAME} || true"
 
-            echo "Caching Docker image in Minikube for direct use by Kubernetes..."
-            sh "minikube cache add ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Loading Docker image into Minikube's internal Docker daemon..."
+            sh "minikube image load ${IMAGE_NAME}:${IMAGE_TAG}"
         }
     }
 }
