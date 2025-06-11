@@ -48,27 +48,24 @@ stage('Build Docker Image into Minikube') {
     steps {
         script {
             echo "🎯 Getting Minikube's Docker environment..."
-            // Використовуйте sh -c "eval" для Jenkins
-            // Це дозволить змінним оточення встановитись у поточному shell
+
             def dockerEnvScript = "minikube -p minikube docker-env"
-            // Виконати команду та отримати вивід, потім виконати 'eval' для встановлення змінних оточення
             sh "eval \"\$(${dockerEnvScript})\""
 
 
             echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-            // Переконайтеся, що ви знаходитесь у корені вашого репозиторію, де лежить Dockerfile
-            // Поточна робоча директорія в Jenkinsfile - це корінь клонованого репозиторію.
-            // Якщо Dockerfile знаходиться в корені, це правильно.
             sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
 
             echo "✅ Docker image is now available inside Minikube. Verifying..."
             sh "docker images | grep ${IMAGE_NAME} || true"
 
             echo "Loading Docker image into Minikube's internal Docker daemon..."
-            sh "minikube image load ${IMAGE_NAME}:${IMAGE_TAG}"
+            sh "minikube image load hello-world-php"
         }
     }
 }
+
+
 stage('Deploy to Minikube') {
     steps {
         script {
@@ -78,8 +75,6 @@ stage('Deploy to Minikube') {
 
             sh "echo KUBECONFIG is set to: ${env.KUBECONFIG}"
             sh "ls -la ${env.KUBECONFIG} || true"
-
-            // ДОДАЙТЕ ЦЕЙ РЯДОК ДЛЯ ДІАГНОСТИКИ:
             sh "echo 'Server URL from kubeconfig:'"
             sh "kubectl config view --minify --output jsonpath='{.clusters[0].cluster.server}' || true"
 
@@ -87,7 +82,6 @@ stage('Deploy to Minikube') {
             try {
                 sh "kubectl config use-context minikube"
                 sh "kubectl config current-context"
-
                 echo "🗑️ Deleting old Kubernetes resources if they exist..."
                 sh "kubectl delete deployment ${K8S_DEPLOYMENT_NAME} --namespace=default --ignore-not-found=true --insecure-skip-tls-verify"
                 sh "kubectl delete service ${K8S_SERVICE_NAME} --namespace=default --ignore-not-found=true --insecure-skip-tls-verify"
