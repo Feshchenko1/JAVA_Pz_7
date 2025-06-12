@@ -120,7 +120,7 @@ pipeline {
                     echo "🔗 Service URL (will show external IP if service is LoadBalancer type):"
                     sh "kubectl get service ${K8S_SERVICE_NAME} --namespace=default -o wide"
 
-                } catch (e) {
+                 catch (e) {
                     echo "❌ Failed to deploy to GKE: ${e.getMessage()}"
                     echo "--- DIAGNOSTIC INFORMATION ---"
                     echo "Retrieving deployment status:"
