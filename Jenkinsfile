@@ -139,7 +139,7 @@ pipeline {
                            }
                        }
                    }
-               }
+               }}
 
     post {
         success {
