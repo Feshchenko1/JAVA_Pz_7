@@ -16,9 +16,7 @@ pipeline {
         K8S_SERVICE_NAME = "pz41-app-service"
 
         // Додаємо змінну оточення для Docker Host
-        DOCKER_HOST = "unix:///tmp/docker.sock" // <--- НОВА ЗМІННА
-        // PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" // <--- Цей рядок можна видалити, він не потрібен, якщо PATH вже коректно налаштований в образі.
-
+        DOCKER_HOST = "tcp://host.docker.internal:2375" // <--- ЗМІНА ТУТ: ВИКОРИСТОВУЄМО TCP
     }
 
     stages {
