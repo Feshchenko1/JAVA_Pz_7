@@ -15,6 +15,10 @@ pipeline {
         K8S_DEPLOYMENT_NAME = "pz41-app-deployment"
         K8S_SERVICE_NAME = "pz41-app-service"
 
+        // Додаємо змінну оточення для Docker Host
+        DOCKER_HOST = "unix:///tmp/docker.sock" // <--- НОВА ЗМІННА
+        // PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" // <--- Цей рядок можна видалити, він не потрібен, якщо PATH вже коректно налаштований в образі.
+
     }
 
     stages {
@@ -56,8 +60,7 @@ pipeline {
             steps {
                 script {
                     echo "⚙️ Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}..."
-                    // Ми припускаємо, що Jenkins має доступ до Docker-демона хоста.
-                    // Якщо Jenkins працює в контейнері, переконайтеся, що /var/run/docker.sock примонтовано.
+                    // Docker CLI тепер автоматично використовуватиме DOCKER_HOST
                     sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
 
                     echo "✅ Docker image built locally. Verifying..."
@@ -71,9 +74,11 @@ pipeline {
                 script {
                     echo "🔐 Logging into Docker Hub..."
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                        // Docker CLI тепер автоматично використовуватиме DOCKER_HOST
                         sh "echo \"$DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin"
                     }
                     echo "🚀 Pushing Docker image ${IMAGE_NAME}:${IMAGE_TAG} to Docker Hub..."
+                    // Docker CLI тепер автоматично використовуватиме DOCKER_HOST
                     sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                     echo "✅ Docker image pushed to Docker Hub."
                 }
@@ -140,7 +145,8 @@ pipeline {
                            }
                        }
                    }
-               }}
+               }
+    }
 
     post {
         success {
