@@ -1,7 +1,9 @@
 FROM jenkins/jenkins:lts-jdk17
 
 USER root
-RUN apt-get update && apt-get install -y \
+
+# Оновлення та встановлення базових пакетів
+RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
     curl \
@@ -10,27 +12,24 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     git \
     maven \
-    unzip
+    unzip \
+    jq # Додано jq для можливої роботи з JSON
 
-RUN mkdir -p /etc/apt/keyrings
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# Додавання репозиторію Docker та встановлення Docker Engine
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+# Встановлення kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Встановлення Google Cloud SDK (gcloud CLI)
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
-    apt-get update && apt-get install -y google-cloud-cli # <-- Це правильно, ви це вже маєте!
+    apt-get update && apt-get install -y --no-install-recommends google-cloud-cli
 
-
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-
-#RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-#RUN install -o root -g root -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
-
-ARG DOCKER_GID=0
-
-RUN groupadd -g ${DOCKER_GID} docker 2>/dev/null || usermod -aG root jenkins
-RUN usermod -aG docker jenkins || true
-
-RUN usermod -aG root jenkins
-
-USER jenkins
+# Додавання користувача jenkins до групи docker
+# Це дозволяє jenkins взаємодіяти з docker socket хоста
+RUN usermod -aG docker jenkins
