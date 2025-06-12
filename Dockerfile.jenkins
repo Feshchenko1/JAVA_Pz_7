@@ -33,6 +33,3 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 # Додавання користувача jenkins до групи docker
 # Це дозволяє jenkins взаємодіяти з docker socket хоста
 RUN usermod -aG docker jenkins
-
-# Перемикаємося на користувача jenkins
-USER jenkins
